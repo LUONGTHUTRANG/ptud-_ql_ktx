@@ -8,6 +8,9 @@ const Login: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    // Save role to localStorage to persist state across pages like Settings
+    localStorage.setItem('role', activeTab);
+    
     if (activeTab === 'manager') {
       navigate('/manager-home');
     } else {

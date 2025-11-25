@@ -31,7 +31,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ role = 'student' }) => {
     { icon: 'home', label: 'Trang chủ', path: '/home' },
     { icon: 'grid_view', label: 'Dịch vụ', path: '/services' },
     { icon: 'notifications', label: 'Thông báo', path: '/notifications' },
-    { icon: 'person', label: 'Tài khoản', path: '/account' },
+    { icon: 'settings', label: 'Cài đặt', path: '/settings' },
   ];
 
   const managerNavItems = [
