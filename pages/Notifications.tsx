@@ -56,12 +56,7 @@ const Notifications: React.FC = () => {
       {/* Header */}
       <div className="sticky top-0 z-10 flex items-center justify-between bg-background-light/80 p-4 pb-3 backdrop-blur-sm">
         <div className="flex size-12 shrink-0 items-center">
-          <button 
-            onClick={() => navigate(-1)}
-            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-slate-700 hover:bg-slate-200/50 transition-colors"
-          >
-            <span className="material-symbols-outlined text-2xl">arrow_back</span>
-          </button>
+          {/* Back button removed, keeping empty div for layout balance if needed, or just spacer */}
         </div>
         <h1 className="flex-1 text-center text-lg font-bold leading-tight tracking-[-0.015em] text-slate-900">
           Thông báo
@@ -78,6 +73,7 @@ const Notifications: React.FC = () => {
         {notifications.map((item) => (
           <div
             key={item.id}
+            onClick={() => navigate(`/notifications/${item.id}`)}
             className={`flex cursor-pointer items-center gap-4 rounded-lg bg-transparent p-3 transition-colors hover:bg-slate-200/50 ${
               item.isRead ? 'opacity-70 hover:opacity-100' : ''
             }`}

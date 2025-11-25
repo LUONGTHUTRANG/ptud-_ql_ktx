@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import Notifications from './pages/Notifications';
+import NotificationDetail from './pages/NotificationDetail';
 import ManagerHome from './pages/ManagerHome';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
@@ -16,6 +17,7 @@ const App: React.FC = () => {
           <Route path="/" element={<Login />} />
           <Route path="/home" element={<Home />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/notifications/:id" element={<NotificationDetail />} />
           <Route path="/manager-home" element={<ManagerHome />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />

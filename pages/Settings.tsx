@@ -19,12 +19,8 @@ const Settings: React.FC = () => {
     <div className="relative flex min-h-screen flex-col bg-background-light pb-24 font-sans">
       {/* Header */}
       <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-b-slate-200 bg-white px-4">
-        <button 
-            onClick={() => navigate(-1)}
-            className="flex size-10 shrink-0 items-center justify-center text-slate-700 hover:bg-slate-50 rounded-full transition-colors"
-        >
-          <span className="material-symbols-outlined text-2xl">arrow_back</span>
-        </button>
+        {/* Spacer to balance title alignment */}
+        <div className="size-10 shrink-0"></div>
         <h2 className="flex-1 text-center text-lg font-bold leading-tight tracking-[-0.015em] text-slate-900">
           Cài đặt
         </h2>
