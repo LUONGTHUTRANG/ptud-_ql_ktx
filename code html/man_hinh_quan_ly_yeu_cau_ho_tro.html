@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+
+<html class="light" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Màn hình Quản lý Yêu cầu Hỗ trợ</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24;
+            font-size: 24px;
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#136dec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101822",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
+<!-- Top App Bar -->
+<div class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 p-4 pb-3 backdrop-blur-sm justify-between">
+<h1 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-[-0.015em] flex-1">Quản lý Yêu cầu</h1>
+<button class="flex size-10 items-center justify-center rounded-full text-slate-900 dark:text-white bg-slate-200 dark:bg-slate-800">
+<span class="material-symbols-outlined !text-2xl">add</span>
+</button>
+</div>
+<!-- Search Bar -->
+<div class="px-4 py-2">
+<label class="flex flex-col min-w-40 h-12 w-full">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full">
+<div class="text-slate-500 dark:text-slate-400 flex border-none bg-slate-200 dark:bg-slate-800 items-center justify-center pl-4 rounded-l-lg border-r-0">
+<span class="material-symbols-outlined !text-2xl">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-0 border-none bg-slate-200 dark:bg-slate-800 focus:border-none h-full placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 rounded-l-none border-l-0 pl-2 text-base font-normal leading-normal" placeholder="Tìm theo mã, tên sinh viên..." value=""/>
+</div>
+</label>
+</div>
+<!-- Chips -->
+<div class="flex gap-2 p-4 pt-1 overflow-x-auto">
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-1.5 rounded-full bg-primary/20 dark:bg-primary/30 px-4">
+<p class="text-primary dark:text-white text-sm font-medium leading-normal">Tất cả</p>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-slate-200 dark:bg-slate-800 pl-4 pr-3">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium leading-normal">Trạng thái</p>
+<span class="material-symbols-outlined !text-xl text-slate-500 dark:text-slate-400">expand_more</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-slate-200 dark:bg-slate-800 pl-4 pr-3">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium leading-normal">Loại</p>
+<span class="material-symbols-outlined !text-xl text-slate-500 dark:text-slate-400">expand_more</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-slate-200 dark:bg-slate-800 pl-4 pr-3">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium leading-normal">Tòa nhà</p>
+<span class="material-symbols-outlined !text-xl text-slate-500 dark:text-slate-400">expand_more</span>
+</button>
+</div>
+<!-- List Items -->
+<div class="flex flex-col gap-3 px-4 pb-4">
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900 p-4">
+<div class="flex items-start gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-500 dark:text-orange-300">
+<span class="material-symbols-outlined">build</span>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<p class="text-slate-900 dark:text-white text-base font-semibold leading-normal">Sửa chữa #SC123</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Nguyễn Văn A - P.404 A2</p>
+<p class="text-slate-400 dark:text-slate-500 text-sm font-normal leading-normal">18/07/2024</p>
+</div>
+<div class="flex items-center gap-1.5 rounded-full bg-orange-100 dark:bg-orange-900/50 px-3 py-1">
+<div class="size-2 rounded-full bg-orange-400"></div>
+<p class="text-xs font-medium text-orange-600 dark:text-orange-300">Đang xử lý</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900 p-4">
+<div class="flex items-start gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-300">
+<span class="material-symbols-outlined">report</span>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<p class="text-slate-900 dark:text-white text-base font-semibold leading-normal">Khiếu nại #KN456</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Trần Thị B - P.201 B1</p>
+<p class="text-slate-400 dark:text-slate-500 text-sm font-normal leading-normal">17/07/2024</p>
+</div>
+<div class="flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-900/50 px-3 py-1">
+<div class="size-2 rounded-full bg-green-400"></div>
+<p class="text-xs font-medium text-green-600 dark:text-green-300">Hoàn thành</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900 p-4">
+<div class="flex items-start gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-500 dark:text-blue-300">
+<span class="material-symbols-outlined">lightbulb</span>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<p class="text-slate-900 dark:text-white text-base font-semibold leading-normal">Đề xuất #DX789</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Lê Văn C - P.1103 C2</p>
+<p class="text-slate-400 dark:text-slate-500 text-sm font-normal leading-normal">16/07/2024</p>
+</div>
+<div class="flex items-center gap-1.5 rounded-full bg-blue-100 dark:bg-blue-900/50 px-3 py-1">
+<div class="size-2 rounded-full bg-blue-400"></div>
+<p class="text-xs font-medium text-blue-600 dark:text-blue-300">Mới</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900 p-4">
+<div class="flex items-start gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-500/20 text-orange-500 dark:text-orange-300">
+<span class="material-symbols-outlined">build</span>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<p class="text-slate-900 dark:text-white text-base font-semibold leading-normal">Sửa chữa #SC125</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Phạm Thị D - P.505 A1</p>
+<p class="text-slate-400 dark:text-slate-500 text-sm font-normal leading-normal">15/07/2024</p>
+</div>
+<div class="flex items-center gap-1.5 rounded-full bg-slate-200 dark:bg-slate-700 px-3 py-1">
+<div class="size-2 rounded-full bg-slate-400"></div>
+<p class="text-xs font-medium text-slate-600 dark:text-slate-300">Từ chối</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-900 p-4">
+<div class="flex items-start gap-4">
+<div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-300">
+<span class="material-symbols-outlined">report</span>
+</div>
+<div class="flex flex-1 flex-col justify-center">
+<p class="text-slate-900 dark:text-white text-base font-semibold leading-normal">Khiếu nại #KN457</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Vũ Minh E - P.701 B2</p>
+<p class="text-slate-400 dark:text-slate-500 text-sm font-normal leading-normal">14/07/2024</p>
+</div>
+<div class="flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-900/50 px-3 py-1">
+<div class="size-2 rounded-full bg-green-400"></div>
+<p class="text-xs font-medium text-green-600 dark:text-green-300">Hoàn thành</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>
