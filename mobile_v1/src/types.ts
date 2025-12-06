@@ -6,7 +6,7 @@ export type RootStackParamList = {
   PaymentDetail: undefined;
   TransactionHistory: undefined;
   BuildingList: undefined;
-  RoomList: { id: string };
+  RoomList: { id: string; name: string };
   RequestHistory: undefined;
   RequestDetail: { id: string };
   CreateRequest: undefined;

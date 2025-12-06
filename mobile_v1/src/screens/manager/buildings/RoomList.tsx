@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,15 @@ import {
   TextInput,
   ScrollView,
   StatusBar,
+  ActivityIndicator,
+  Modal,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { fetchRooms } from "../../../services/api";
 
 type RoomListScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -28,74 +32,142 @@ interface Props {
 interface RoomItem {
   id: string;
   name: string;
-  price: string;
-  status: "available" | "full" | "maintenance";
+  price: number;
+  status: "AVAILABLE" | "FULL" | "MAINTENANCE";
   capacity: number;
   hasAC: boolean;
   hasHeater: boolean;
-  hasBalcony: boolean;
+  hasWasher: boolean;
 }
 
 const RoomList = ({ navigation, route }: Props) => {
-  const { id } = route.params;
+  const { id, name } = route.params;
   const [searchQuery, setSearchQuery] = useState("");
+  const [rooms, setRooms] = useState<RoomItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  // Filter states
+  const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
+  const [selectedCapacity, setSelectedCapacity] = useState<number | null>(null);
+  const [filterAC, setFilterAC] = useState(false);
+  const [filterHeater, setFilterHeater] = useState(false);
+  const [filterWasher, setFilterWasher] = useState(false);
 
-  // Mock Data
-  const rooms: RoomItem[] = [
-    {
-      id: "101",
-      name: "Phòng 101",
-      price: "1.500.000 VNĐ/tháng",
-      status: "available",
-      capacity: 8,
-      hasAC: true,
-      hasHeater: true,
-      hasBalcony: true,
-    },
-    {
-      id: "102",
-      name: "Phòng 102",
-      price: "1.500.000 VNĐ/tháng",
-      status: "full",
-      capacity: 8,
-      hasAC: true,
-      hasHeater: true,
-      hasBalcony: false,
-    },
-    {
-      id: "103",
-      name: "Phòng 103",
-      price: "1.200.000 VNĐ/tháng",
-      status: "maintenance",
-      capacity: 6,
-      hasAC: false,
-      hasHeater: true,
-      hasBalcony: false,
-    },
-    {
-      id: "201",
-      name: "Phòng 201",
-      price: "1.700.000 VNĐ/tháng",
-      status: "available",
-      capacity: 6,
-      hasAC: true,
-      hasHeater: true,
-      hasBalcony: true,
-    },
+  // Modal states
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activeFilterType, setActiveFilterType] = useState<
+    "price" | "capacity" | null
+  >(null);
+
+  const priceOptions = [
+    { label: "Tất cả", value: null },
+    { label: "Dưới 2,000,000", value: 2000000 },
+    { label: "Dưới 3,000,000", value: 3000000 },
+    { label: "Dưới 4,000,000", value: 4000000 },
+    { label: "Trên 4,000,000", value: 4000001 },
   ];
 
-  const filteredRooms = rooms.filter((r) =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const capacityOptions = [
+    { label: "Tất cả", value: null },
+    { label: "4 người", value: 4 },
+    { label: "6 người", value: 6 },
+    { label: "8 người", value: 8 },
+    { label: "10 người", value: 10 },
+  ];
+
+  const handleOpenFilter = (type: "price" | "capacity") => {
+    setActiveFilterType(type);
+    setModalVisible(true);
+  };
+
+  const handleSelectOption = (option: {
+    label: string;
+    value: number | null;
+  }) => {
+    if (activeFilterType === "price") {
+      setSelectedPrice(option.value);
+    } else if (activeFilterType === "capacity") {
+      setSelectedCapacity(option.value);
+    }
+    setModalVisible(false);
+  };
+
+  const getActiveOptions = () => {
+    switch (activeFilterType) {
+      case "price":
+        return priceOptions;
+      case "capacity":
+        return capacityOptions;
+      default:
+        return [];
+    }
+  };
+
+  useEffect(() => {
+    loadRooms();
+  }, [id]);
+
+  const loadRooms = async () => {
+    try {
+      const data = await fetchRooms();
+      // Filter rooms by building_id (id from params)
+      const buildingRooms = data.filter(
+        (room: any) => String(room.building_id) === String(id)
+      );
+
+      const mappedRooms = buildingRooms.map((item: any) => ({
+        id: String(item.id),
+        name: `Phòng ${item.room_number}`,
+        price: Number(item.price_per_semester),
+        status: item.status || "available",
+        capacity: item.max_capacity,
+        hasAC: Boolean(item.has_ac),
+        hasHeater: Boolean(item.has_heater),
+        hasWasher: Boolean(item.has_washer),
+      }));
+      setRooms(mappedRooms);
+    } catch (error) {
+      console.error("Failed to load rooms", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRooms = rooms.filter((r) => {
+    const matchesSearch = r.name
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesPrice = selectedPrice
+      ? selectedPrice > 4000000
+        ? r.price >= 4000000
+        : r.price <= selectedPrice
+      : true;
+    const matchesCapacity = selectedCapacity
+      ? r.capacity === selectedCapacity
+      : true;
+    const matchesAC = filterAC ? r.hasAC : true;
+    const matchesHeater = filterHeater ? r.hasHeater : true;
+    const matchesWasher = filterWasher ? r.hasWasher : true;
+
+    return (
+      matchesSearch &&
+      matchesPrice &&
+      matchesCapacity &&
+      matchesAC &&
+      matchesHeater &&
+      matchesWasher
+    );
+  });
 
   const getStatusBadge = (status: RoomItem["status"]) => {
     switch (status) {
-      case "available":
+      case "AVAILABLE":
         return { bg: "#dcfce7", text: "#15803d", label: "Còn trống" };
-      case "full":
+      case "FULL":
         return { bg: "#ffedd5", text: "#c2410c", label: "Đã đầy" };
-      case "maintenance":
+      case "MAINTENANCE":
         return { bg: "#fee2e2", text: "#b91c1c", label: "Bảo trì" };
+      default:
+        return { bg: "#f1f5f9", text: "#475569", label: status };
     }
   };
 
@@ -106,7 +178,9 @@ const RoomList = ({ navigation, route }: Props) => {
         <View style={styles.itemHeader}>
           <View style={styles.itemInfo}>
             <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemPrice}>Giá: {item.price}</Text>
+            <Text style={styles.itemPrice}>
+              Giá: {item.price.toLocaleString()} VNĐ/kỳ
+            </Text>
           </View>
           <View
             style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}
@@ -156,23 +230,36 @@ const RoomList = ({ navigation, route }: Props) => {
           </View>
           <View style={styles.amenityItem}>
             <MaterialIcons
-              name="balcony"
+              name="local-laundry-service"
               size={18}
-              color={item.hasBalcony ? "#334155" : "#94a3b8"}
+              color={item.hasWasher ? "#334155" : "#94a3b8"}
             />
             <Text
               style={[
                 styles.amenityText,
-                !item.hasBalcony && styles.amenityDisabled,
+                !item.hasWasher && styles.amenityDisabled,
               ]}
             >
-              Ban công: {item.hasBalcony ? "Có" : "Không"}
+              Máy giặt: {item.hasWasher ? "Có" : "Không"}
             </Text>
           </View>
         </View>
       </View>
     );
   };
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -186,7 +273,7 @@ const RoomList = ({ navigation, route }: Props) => {
         >
           <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Quản lý phòng - Nhà {id || "A1"}</Text>
+        <Text style={styles.headerTitle}>Danh sách phòng - Nhà {name}</Text>
         <View style={styles.headerRight} />
       </View>
 
@@ -213,22 +300,99 @@ const RoomList = ({ navigation, route }: Props) => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScroll}
         >
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Giá</Text>
-            <MaterialIcons name="expand-more" size={20} color="#64748b" />
+          {/* Price Filter */}
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedPrice !== null && styles.filterButtonActive,
+            ]}
+            onPress={() => handleOpenFilter("price")}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                selectedPrice !== null && styles.filterTextActive,
+              ]}
+            >
+              {selectedPrice
+                ? selectedPrice > 4000000
+                  ? "> 4,000,000"
+                  : `< ${selectedPrice.toLocaleString()}`
+                : "Giá"}
+            </Text>
+            <MaterialIcons
+              name="expand-more"
+              size={20}
+              color={selectedPrice !== null ? "#0ea5e9" : "#64748b"}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Sức chứa</Text>
-            <MaterialIcons name="expand-more" size={20} color="#64748b" />
+
+          {/* Capacity Filter */}
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              selectedCapacity !== null && styles.filterButtonActive,
+            ]}
+            onPress={() => handleOpenFilter("capacity")}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                selectedCapacity !== null && styles.filterTextActive,
+              ]}
+            >
+              {selectedCapacity ? `${selectedCapacity} người` : "Sức chứa"}
+            </Text>
+            <MaterialIcons
+              name="expand-more"
+              size={20}
+              color={selectedCapacity !== null ? "#0ea5e9" : "#64748b"}
+            />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Điều hòa</Text>
+
+          <TouchableOpacity
+            style={[styles.filterButton, filterAC && styles.filterButtonActive]}
+            onPress={() => setFilterAC(!filterAC)}
+          >
+            <Text
+              style={[styles.filterText, filterAC && styles.filterTextActive]}
+            >
+              Điều hòa
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Nóng lạnh</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              filterHeater && styles.filterButtonActive,
+            ]}
+            onPress={() => setFilterHeater(!filterHeater)}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterHeater && styles.filterTextActive,
+              ]}
+            >
+              Nóng lạnh
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Text style={styles.filterText}>Ban công</Text>
+
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              filterWasher && styles.filterButtonActive,
+            ]}
+            onPress={() => setFilterWasher(!filterWasher)}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterWasher && styles.filterTextActive,
+              ]}
+            >
+              Máy giặt
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -240,6 +404,54 @@ const RoomList = ({ navigation, route }: Props) => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
       />
+
+      {/* Filter Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>
+                  {activeFilterType === "price"
+                    ? "Chọn mức giá"
+                    : "Chọn sức chứa"}
+                </Text>
+                {getActiveOptions().map((option, index) => {
+                  const isSelected =
+                    activeFilterType === "price"
+                      ? selectedPrice === option.value
+                      : selectedCapacity === option.value;
+
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.modalOption}
+                      onPress={() => handleSelectOption(option)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalOptionText,
+                          isSelected && styles.selectedModalOptionText,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      {isSelected && (
+                        <MaterialIcons name="check" size={20} color="#0ea5e9" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 };
@@ -316,10 +528,53 @@ const styles = StyleSheet.create({
     borderColor: "#e2e8f0",
     gap: 4,
   },
+  filterButtonActive: {
+    backgroundColor: "#e0f2fe",
+    borderColor: "#0ea5e9",
+  },
   filterText: {
     fontSize: 14,
     fontWeight: "500",
     color: "#334155",
+  },
+  filterTextActive: {
+    color: "#0284c7",
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: "50%",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0f172a",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: "#334155",
+  },
+  selectedModalOptionText: {
+    color: "#0ea5e9",
+    fontWeight: "600",
   },
   listContent: {
     padding: 16,

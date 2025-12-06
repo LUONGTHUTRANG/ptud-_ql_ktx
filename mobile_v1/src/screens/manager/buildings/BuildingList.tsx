@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   FlatList,
   TextInput,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { fetchBuildings } from "../../../services/api";
 
 type BuildingListScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -29,29 +31,28 @@ interface BuildingItem {
 
 const BuildingList = ({ navigation }: Props) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [buildings, setBuildings] = useState<BuildingItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const buildings: BuildingItem[] = [
-    {
-      id: "A1",
-      name: "Tòa A1",
-      info: "Số phòng: 50 | Vị trí: Gần cổng chính",
-    },
-    {
-      id: "A2",
-      name: "Tòa A2",
-      info: "Số phòng: 60 | Vị trí: Cạnh tòa A1",
-    },
-    {
-      id: "B1",
-      name: "Tòa B1",
-      info: "Số phòng: 45 | Vị trí: Khu B, đối diện sân bóng",
-    },
-    {
-      id: "G6",
-      name: "Tòa G6",
-      info: "Số phòng: 100 | Vị trí: Khu nhà G, gần thư viện",
-    },
-  ];
+  useEffect(() => {
+    loadBuildings();
+  }, []);
+
+  const loadBuildings = async () => {
+    try {
+      const data = await fetchBuildings();
+      const mappedData = data.map((item: any) => ({
+        id: String(item.id),
+        name: item.name,
+        info: `Số phòng: ${item.room_count || 0} | Vị trí: ${item.location}`,
+      }));
+      setBuildings(mappedData);
+    } catch (error) {
+      console.error("Failed to load buildings", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredBuildings = buildings.filter((b) =>
     b.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -59,7 +60,9 @@ const BuildingList = ({ navigation }: Props) => {
 
   const renderItem = ({ item }: { item: BuildingItem }) => (
     <TouchableOpacity
-      onPress={() => navigation.navigate("RoomList", { id: item.id })}
+      onPress={() =>
+        navigation.navigate("RoomList", { id: item.id, name: item.name })
+      }
       style={styles.itemContainer}
     >
       <View style={styles.iconContainer}>
@@ -72,6 +75,19 @@ const BuildingList = ({ navigation }: Props) => {
       <MaterialIcons name="chevron-right" size={24} color="#94a3b8" />
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
