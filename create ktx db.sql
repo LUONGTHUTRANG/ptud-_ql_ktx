@@ -25,6 +25,57 @@ CREATE TABLE semesters (
     
     is_active BOOLEAN DEFAULT FALSE COMMENT 'Chỉ có 1 học kỳ active tại 1 thời điểm'
 );
+ALTER TABLE semesters
+    -- 1. Xóa cột 'name'
+    DROP COLUMN name,
+
+    -- 2. Thêm cột 'term' (INT)
+    ADD COLUMN term ENUM('1', '2', '3') NOT NULL COMMENT 'Học kỳ (1, 2, hoặc 3)',
+
+    -- 3. Thêm cột 'academic_year' (VARCHAR)
+    ADD COLUMN academic_year VARCHAR(9) NOT NULL COMMENT 'Năm học, ví dụ: 2024-2025';
+    
+INSERT INTO semesters (
+    term, academic_year, start_date, end_date,
+    registration_open_date, registration_close_date,
+    registration_special_open_date, registration_special_close_date,
+    renewal_open_date, renewal_close_date,
+    is_active
+) VALUES (
+    1, '2024-2025', '2024-09-02', '2025-01-15', -- start_date và end_date
+    '2024-08-01 08:00:00', '2024-08-15 17:00:00', -- đăng ký ở mới
+    '2024-07-25 08:00:00', '2024-07-31 17:00:00', -- đăng ký ưu tiên
+    '2024-08-16 08:00:00', '2024-08-30 17:00:00', -- đăng ký gia hạn
+    TRUE -- is_active
+);
+
+-- Chèn dữ liệu mẫu cho học kỳ 2 năm 2024-2025 (Kỳ không active)
+INSERT INTO semesters (
+    term, academic_year, start_date, end_date,
+    registration_open_date, registration_close_date,
+    registration_special_open_date, registration_special_close_date,
+    renewal_open_date, renewal_close_date,
+    is_active
+) VALUES (
+    2, '2024-2025', '2025-02-01', '2025-06-15', -- start_date và end_date
+    '2025-01-05 08:00:00', '2025-01-20 17:00:00', -- đăng ký ở mới
+    '2025-01-01 08:00:00', '2025-01-04 17:00:00', -- đăng ký ưu tiên
+    '2025-01-21 08:00:00', '2025-01-30 17:00:00', -- đăng ký gia hạn
+    FALSE -- is_active
+);
+
+-- Chèn dữ liệu mẫu cho học kỳ Hè (term=3) năm 2024-2025
+INSERT INTO semesters (
+    term, academic_year, start_date, end_date,
+    registration_open_date, registration_close_date,
+    renewal_open_date, renewal_close_date,
+    is_active
+) VALUES (
+    3, '2024-2025', '2025-07-01', '2025-08-15', -- start_date và end_date
+    '2025-06-10 08:00:00', '2025-06-20 17:00:00', -- đăng ký ở mới
+    '2025-06-21 08:00:00', '2025-06-30 17:00:00', -- đăng ký gia hạn
+    FALSE -- is_active
+);
 
 -- Bảng Quản trị viên (Admin)
 CREATE TABLE admins (
@@ -37,7 +88,7 @@ CREATE TABLE admins (
 -- Bảng Tòa nhà
 CREATE TABLE buildings (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL COMMENT 'Ví dụ: Tòa A1, Tòa B2',
+    name VARCHAR(50) NOT NULL COMMENT 'Ví dụ: A1, B2',
     location VARCHAR(255) COMMENT 'Vị trí trong khuôn viên',
     gender_restriction ENUM('MALE', 'FEMALE', 'MIXED') DEFAULT 'MIXED' COMMENT 'Tòa dành riêng cho nam/nữ hoặc hỗn hợp'
 );
@@ -107,6 +158,24 @@ CREATE TABLE stay_records (
     FOREIGN KEY (student_id) REFERENCES students(id),
     FOREIGN KEY (room_id) REFERENCES rooms(id),
     FOREIGN KEY (semester_id) REFERENCES semesters(id)
+);
+INSERT INTO stay_records (
+    student_id, room_id, semester_id, start_date, end_date, status
+) VALUES
+(
+    1, 101, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 1 ở phòng 101, đang hoạt động
+),
+(
+    2, 101, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 2 ở phòng 101 (cùng phòng), đang hoạt động
+),
+(
+    3, 102, 1, '2024-09-02', '2025-01-15', 'CHECKED_OUT' -- SV 3 đã trả phòng (CHECKED_OUT)
+),
+(
+    4, 205, 1, '2024-09-02', '2024-09-10', 'CANCELLED'  -- SV 4 đã hủy đăng ký (CANCELLED)
+),
+(
+    5, 205, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 5 ở phòng 205, đang hoạt động
 );
 
 -- Bảng Đăng ký ở (Bao gồm thường và ưu tiên)

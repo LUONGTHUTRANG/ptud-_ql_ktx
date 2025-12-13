@@ -2,10 +2,16 @@ import db from "../config/db.js";
 
 const Student = {
   getAll: async (limit = 20, offset = 0) => {
-    const [rows] = await db.query("SELECT * FROM students LIMIT ? OFFSET ?", [
-      limit,
-      offset,
-    ]);
+    const query = `
+      SELECT s.id, s.mssv, s.full_name, s.email, s.phone_number, s.gender, s.class_name, s.student_status, s.stay_status, s.current_room_id,
+             r.room_number, b.name as building_name
+      FROM students s
+      LEFT JOIN rooms r ON s.current_room_id = r.id
+      LEFT JOIN buildings b ON r.building_id = b.id
+      WHERE s.student_status = 'STUDYING'
+      LIMIT ? OFFSET ?
+    `;
+    const [rows] = await db.query(query, [limit, offset]);
     return rows;
   },
 
@@ -15,23 +21,28 @@ const Student = {
   },
 
   getByRoomId: async (roomId) => {
-    const [rows] = await db.query(
-      "SELECT * FROM students WHERE current_room_id = ?",
-      [roomId]
-    );
+    const query = `
+      SELECT s.id, s.mssv, s.full_name, s.email, s.phone_number, s.gender, s.class_name, s.student_status, s.stay_status, s.current_room_id,
+             r.room_number, b.name as building_name
+      FROM students s
+      LEFT JOIN rooms r ON s.current_room_id = r.id
+      LEFT JOIN buildings b ON r.building_id = b.id
+      WHERE s.current_room_id = ?
+    `;
+    const [rows] = await db.query(query, [roomId]);
     return rows;
   },
 
   getByBuildingId: async (buildingId) => {
-    const [rows] = await db.query(
-      `
-      SELECT s.* 
+    const query = `
+      SELECT s.id, s.mssv, s.full_name, s.email, s.phone_number, s.gender, s.class_name, s.student_status, s.stay_status, s.current_room_id,
+             r.room_number, b.name as building_name
       FROM students s
       JOIN rooms r ON s.current_room_id = r.id
+      JOIN buildings b ON r.building_id = b.id
       WHERE r.building_id = ?
-    `,
-      [buildingId]
-    );
+    `;
+    const [rows] = await db.query(query, [buildingId]);
     return rows;
   },
 };

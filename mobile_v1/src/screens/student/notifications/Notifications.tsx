@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,13 @@ import {
   Alert,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../../../types";
 import BottomNav from "../../../components/BottomNav";
 import { NotificationItem } from "../../../models";
+import { notificationApi } from "../../../services/notificationApi";
 
 type NotificationsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -26,45 +29,35 @@ interface Props {
 const Notifications = ({ navigation }: Props) => {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [role, setRole] = useState<"student" | "manager">("student");
 
-  const notifications: NotificationItem[] = [
-    {
-      id: "1",
-      type: "power",
-      title: "Lịch cắt điện toàn KTX ngày 30/11",
-      content:
-        "Để phục vụ công tác bảo trì hệ thống, BQL sẽ tiến hành cắt điện toàn khu vực...",
-      time: "2 giờ trước",
-      isRead: false,
-    },
-    {
-      id: "2",
-      type: "document",
-      title: "Đăng ký nội trú học kỳ mới",
-      content:
-        "Sinh viên có nhu cầu ở lại KTX trong học kỳ tới vui lòng hoàn tất đăng ký...",
-      time: "Hôm qua",
-      isRead: false,
-    },
-    {
-      id: "3",
-      type: "cleaning",
-      title: "Yêu cầu giữ gìn vệ sinh chung",
-      content:
-        "Nhắc nhở toàn thể sinh viên về việc giữ gìn vệ sinh tại các khu vực sinh hoạt chung.",
-      time: "25/10/2023",
-      isRead: true,
-    },
-    {
-      id: "4",
-      type: "bug",
-      title: "Lịch phun thuốc diệt côn trùng",
-      content:
-        "BQL sẽ tiến hành phun thuốc diệt muỗi và côn trùng toàn bộ các phòng ở.",
-      time: "22/10/2023",
-      isRead: true,
-    },
-  ];
+  useFocusEffect(
+    useCallback(() => {
+      const fetchNotifications = async () => {
+        try {
+          const role = await AsyncStorage.getItem("role");
+          setRole((role as "student" | "manager") || "student");
+
+          const data = await notificationApi.getMyNotifications();
+          // Map backend data to frontend model
+          const mappedData = data.map((item: any) => ({
+            id: item.id.toString(),
+            type: item.type === "ANNOUNCEMENT" ? "document" : "power", // Map types as needed
+            title: item.title,
+            content: item.content,
+            time: new Date(item.created_at).toLocaleDateString("vi-VN"),
+            isRead: item.is_read === 1,
+          }));
+          setNotifications(mappedData);
+        } catch (error) {
+          console.error("Failed to fetch notifications", error);
+        }
+      };
+
+      fetchNotifications();
+    }, [])
+  );
 
   const getIcon = (type: NotificationItem["type"]) => {
     switch (type) {
@@ -86,7 +79,7 @@ const Notifications = ({ navigation }: Props) => {
     setSelectedIds(new Set([id]));
   };
 
-  const handlePress = (item: NotificationItem) => {
+  const handlePress = async (item: NotificationItem) => {
     if (isSelectionMode) {
       const newSelectedIds = new Set(selectedIds);
       if (newSelectedIds.has(item.id)) {
@@ -99,6 +92,17 @@ const Notifications = ({ navigation }: Props) => {
       }
       setSelectedIds(newSelectedIds);
     } else {
+      if (!item.isRead) {
+        try {
+          await notificationApi.markAsRead(item.id);
+          // Update local state
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
+          );
+        } catch (error) {
+          console.error("Failed to mark as read", error);
+        }
+      }
       navigation.navigate("NotificationDetail", { id: item.id });
     }
   };
@@ -205,7 +209,7 @@ const Notifications = ({ navigation }: Props) => {
       />
 
       {!isSelectionMode ? (
-        <BottomNav role="student" />
+        <BottomNav role={role} />
       ) : (
         <View style={styles.selectionFooter}>
           <View style={styles.selectionInfo}>

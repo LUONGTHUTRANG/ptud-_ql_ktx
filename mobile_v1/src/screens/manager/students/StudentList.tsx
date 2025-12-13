@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,11 +6,16 @@ import {
   StyleSheet,
   FlatList,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { Dropdown } from "react-native-element-dropdown";
 import { RootStackParamList } from "../../../types";
+import { studentApi } from "../../../services/studentApi";
+import { fetchBuildings } from "../../../services/buildingApi";
+import { fetchRooms } from "../../../services/roomApi";
 
 type StudentListScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -33,78 +38,91 @@ interface StudentItem {
 const StudentList = ({ navigation }: Props) => {
   const [filterType, setFilterType] = useState<string>("building");
   const [searchQuery, setSearchQuery] = useState("");
+  const [students, setStudents] = useState<StudentItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [buildingData, setBuildingData] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const [roomData, setRoomData] = useState<{ label: string; value: string }[]>(
+    []
+  );
 
   const filterTypeData = [
     { label: "Tòa nhà", value: "building" },
     { label: "Phòng", value: "room" },
   ];
 
-  const buildingData = [
-    { label: "Tòa A1", value: "A1" },
-    { label: "Tòa B1", value: "B1" },
-    { label: "Tòa C1", value: "C1" },
-    { label: "Tòa G6", value: "G6" },
-    { label: "Tòa A2", value: "A2" },
-  ];
+  useFocusEffect(
+    useCallback(() => {
+      const loadInitialData = async () => {
+        try {
+          const [buildings, rooms] = await Promise.all([
+            fetchBuildings(),
+            fetchRooms(),
+          ]);
 
-  const roomData = [
-    { label: "Phòng 101", value: "101" },
-    { label: "Phòng 102", value: "102" },
-    { label: "Phòng 201", value: "201" },
-    { label: "Phòng 305", value: "305" },
-  ];
+          setBuildingData(
+            buildings.map((b: any) => ({
+              label: b.name,
+              value: b.id.toString(),
+            }))
+          );
+          setRoomData(
+            rooms.map((r: any) => ({
+              label: r.room_number,
+              value: r.id.toString(),
+            }))
+          );
 
-  const students: StudentItem[] = [
-    {
-      id: "1",
-      name: "Nguyễn Văn A",
-      studentId: "SV001",
-      room: "101",
-      building: "A1",
-      status: "Đang ở",
-    },
-    {
-      id: "2",
-      name: "Trần Thị B",
-      studentId: "SV002",
-      room: "102",
-      building: "A1",
-      status: "Đang ở",
-    },
-    {
-      id: "3",
-      name: "Lê Văn C",
-      studentId: "SV003",
-      room: "201",
-      building: "B1",
-      status: "Đang ở",
-    },
-    {
-      id: "4",
-      name: "Phạm Thị D",
-      studentId: "SV004",
-      room: "305",
-      building: "G6",
-      status: "Đang ở",
-    },
-    {
-      id: "5",
-      name: "Hoàng Văn E",
-      studentId: "SV005",
-      room: "101",
-      building: "A2",
-      status: "Đang ở",
-    },
-  ];
+          fetchStudents();
+        } catch (error) {
+          console.error("Failed to load initial data", error);
+        }
+      };
+      loadInitialData();
+    }, [])
+  );
 
-  const filteredStudents = students.filter((s) => {
-    if (!searchQuery) return true;
-    if (filterType === "building") {
-      return s.building === searchQuery;
-    } else {
-      return s.room === searchQuery;
+  const fetchStudents = async () => {
+    setLoading(true);
+    try {
+      let data;
+      if (searchQuery) {
+        if (filterType === "building") {
+          data = await studentApi.getStudentsByBuilding(searchQuery);
+        } else {
+          data = await studentApi.getStudentsByRoom(searchQuery);
+        }
+      } else {
+        const response = await studentApi.getAllStudents();
+        data = response.data;
+      }
+
+      console.log("Fetched Students:", data);
+
+      // Map backend data to frontend model
+      // Note: Backend might need to return room and building info with student
+      // Assuming backend returns joined data or we need to handle it
+      const mappedStudents = data.map((s: any) => ({
+        id: s.id.toString(),
+        name: s.full_name,
+        studentId: s.mssv,
+        room: s.room_number || "N/A", // Needs backend to join rooms
+        building: s.building_name || "N/A", // Needs backend to join buildings
+        status: s.stay_status === "STAYING" ? "Đang ở" : "Chưa ở",
+      }));
+      setStudents(mappedStudents);
+    } catch (error) {
+      console.error("Failed to fetch students", error);
+    } finally {
+      setLoading(false);
     }
-  });
+  };
+
+  // Trigger fetch when filter changes
+  React.useEffect(() => {
+    fetchStudents();
+  }, [searchQuery, filterType]);
 
   const renderItem = ({ item }: { item: StudentItem }) => (
     <TouchableOpacity style={styles.itemContainer}>
@@ -114,12 +132,26 @@ const StudentList = ({ navigation }: Props) => {
       <View style={styles.itemContent}>
         <Text style={styles.itemName}>{item.name}</Text>
         <Text style={styles.itemInfo}>MSSV: {item.studentId}</Text>
-        <Text style={styles.itemSubInfo}>
-          {item.building} - P.{item.room}
-        </Text>
+        {item.status === "Đang ở" && (
+          <Text style={styles.itemSubInfo}>
+            {item.building} - {item.room}
+          </Text>
+        )}
       </View>
-      <View style={styles.statusContainer}>
-        <Text style={styles.statusText}>{item.status}</Text>
+      <View
+        style={[
+          styles.statusContainer,
+          item.status === "Chưa ở" && styles.statusContainerInactive,
+        ]}
+      >
+        <Text
+          style={[
+            styles.statusText,
+            item.status === "Chưa ở" && styles.statusTextInactive,
+          ]}
+        >
+          {item.status}
+        </Text>
       </View>
     </TouchableOpacity>
   );
@@ -187,12 +219,23 @@ const StudentList = ({ navigation }: Props) => {
       </View>
 
       {/* List */}
-      <FlatList
-        data={filteredStudents}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-      />
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#0ea5e9" />
+        </View>
+      ) : (
+        <FlatList
+          data={students}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.centerContainer}>
+              <Text style={styles.emptyText}>Không tìm thấy sinh viên nào</Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 };
@@ -310,6 +353,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748b",
     marginTop: 2,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#64748b",
+  },
+  statusContainerInactive: {
+    backgroundColor: "#f1f5f9",
+  },
+  statusTextInactive: {
+    color: "#64748b",
   },
   statusContainer: {
     paddingHorizontal: 8,

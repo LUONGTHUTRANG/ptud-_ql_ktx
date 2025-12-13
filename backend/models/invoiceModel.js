@@ -1,6 +1,13 @@
 import db from "../config/db.js";
 
 const Invoice = {
+  countOverdue: async () => {
+    const [rows] = await db.query(
+      "SELECT COUNT(*) as count FROM invoices WHERE status = 'UNPAID' AND due_date < NOW()"
+    );
+    return rows[0].count;
+  },
+
   getAll: async () => {
     const [rows] = await db.query("SELECT * FROM invoices");
     return rows;

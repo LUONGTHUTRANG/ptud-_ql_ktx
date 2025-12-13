@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,15 @@ import {
   ScrollView,
   Image,
   StatusBar,
+  ActivityIndicator,
+  Linking,
+  Alert,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { notificationApi } from "../../../services/notificationApi";
 
 type NotificationDetailScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -29,21 +33,96 @@ interface Props {
 
 const NotificationDetail = ({ navigation, route }: Props) => {
   const { id } = route.params;
+  const [notification, setNotification] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [imageAspectRatio, setImageAspectRatio] = useState<number>(1);
 
-  // Mock data matching the design
-  const notification = {
-    title: "Thông báo về lịch cắt điện toàn khu KTX",
-    sender: "Ban Quản lý",
-    date: "24/12/2023",
-    time: "08:30",
-    attachments: [
-      {
-        name: "lich-cat-dien-chi-tiet.pdf",
-        size: "128 KB",
-        type: "description",
-      },
-      { name: "so-do-khu-vuc.jpg", size: "1.2 MB", type: "image" },
-    ],
+  useEffect(() => {
+    fetchNotification();
+  }, [id]);
+
+  useEffect(() => {
+    if (notification?.attachment_url && isImage(notification.attachment_path)) {
+      Image.getSize(
+        notification.attachment_url,
+        (width, height) => {
+          setImageAspectRatio(width / height);
+        },
+        (error) => {
+          console.log("Error getting image size:", error);
+        }
+      );
+    }
+  }, [notification]);
+
+  const fetchNotification = async () => {
+    try {
+      setLoading(true);
+      const data = await notificationApi.getNotificationById(id);
+      setNotification(data);
+    } catch (error) {
+      console.error("Failed to fetch notification details", error);
+      Alert.alert("Lỗi", "Không thể tải chi tiết thông báo");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (!notification) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text>Không tìm thấy thông báo</Text>
+      </View>
+    );
+  }
+
+  const formattedDate = new Date(notification.created_at).toLocaleDateString(
+    "vi-VN"
+  );
+  const formattedTime = new Date(notification.created_at).toLocaleTimeString(
+    "vi-VN",
+    { hour: "2-digit", minute: "2-digit" }
+  );
+
+  const senderName =
+    notification.sender_role === "MANAGER" ||
+    notification.sender_role === "ADMIN"
+      ? "Ban Quản lý"
+      : "Hệ thống";
+
+  const handleOpenAttachment = async () => {
+    if (notification.attachment_url) {
+      try {
+        const supported = await Linking.canOpenURL(notification.attachment_url);
+        if (supported) {
+          await Linking.openURL(notification.attachment_url);
+        } else {
+          Alert.alert("Lỗi", "Không thể mở tệp đính kèm này");
+        }
+      } catch (error) {
+        Alert.alert("Lỗi", "Đã xảy ra lỗi khi mở tệp");
+      }
+    }
+  };
+
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    if (["jpg", "jpeg", "png", "gif"].includes(ext || "")) return "image";
+    if (ext === "pdf") return "picture-as-pdf";
+    return "description";
+  };
+
+  const isImage = (fileName: string) => {
+    const ext = fileName.split(".").pop()?.toLowerCase();
+    return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext || "");
   };
 
   return (
@@ -68,78 +147,61 @@ const NotificationDetail = ({ navigation, route }: Props) => {
           <View style={styles.infoArea}>
             <Text style={styles.title}>{notification.title}</Text>
             <Text style={styles.metaInfo}>
-              Người gửi: {notification.sender} | {notification.date}{" "}
-              {notification.time}
+              Người gửi: {senderName} | {formattedDate} {formattedTime}
             </Text>
           </View>
 
           {/* Content Area */}
           <View style={styles.article}>
-            <Text style={styles.paragraph}>Thân gửi các bạn sinh viên,</Text>
-            <Text style={styles.paragraph}>
-              Nhằm mục đích bảo trì và nâng cấp hệ thống lưới điện, Ban Quản lý
-              ký túc xá xin thông báo về việc tạm ngừng cung cấp điện tại toàn
-              bộ các khu nhà.
-            </Text>
-            <View style={styles.list}>
-              <View style={styles.listItem}>
-                <View style={styles.bullet} />
-                <Text style={styles.listItemText}>
-                  <Text style={styles.boldText}>Thời gian dự kiến:</Text> Từ
-                  08:00 đến 17:00 ngày 25/12/2023.
-                </Text>
-              </View>
-              <View style={styles.listItem}>
-                <View style={styles.bullet} />
-                <Text style={styles.listItemText}>
-                  <Text style={styles.boldText}>Khu vực ảnh hưởng:</Text> Toàn
-                  bộ các tòa nhà A, B, và C.
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.paragraph}>
-              Rất mong các bạn sinh viên chú ý sắp xếp công việc và học tập. Vui
-              lòng rút phích cắm các thiết bị điện không cần thiết trước thời
-              gian cắt điện để đảm bảo an toàn.
-            </Text>
-            <Text style={styles.paragraph}>Xin cảm ơn.</Text>
+            <Text style={styles.paragraph}>{notification.content}</Text>
           </View>
 
-          {/* Images Section */}
-          <View style={styles.imageSection}>
-            <Image
-              source={{
-                uri: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=1000&auto=format&fit=crop",
-              }}
-              style={styles.bannerImage}
-              resizeMode="cover"
-            />
-          </View>
-
-          {/* Attachments Area */}
-          <View style={styles.attachmentsArea}>
-            <Text style={styles.attachmentsTitle}>Tệp đính kèm</Text>
-            <View style={styles.attachmentsList}>
-              {notification.attachments.map((file, index) => (
-                <View key={index} style={styles.attachmentItem}>
-                  <View style={styles.attachmentIconContainer}>
+          {/* Attachments */}
+          {notification.attachment_url && (
+            <View style={styles.attachmentsSection}>
+              <Text style={styles.sectionTitle}>Tệp đính kèm</Text>
+              {isImage(notification.attachment_path) ? (
+                <View
+                  style={[
+                    styles.imageContainer,
+                    { aspectRatio: imageAspectRatio },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: notification.attachment_url }}
+                    style={styles.attachmentImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.attachmentItem}
+                  onPress={handleOpenAttachment}
+                >
+                  <View style={styles.attachmentIcon}>
                     <MaterialIcons
-                      name={file.type as any}
+                      name={getFileIcon(notification.attachment_path)}
                       size={24}
                       color="#0ea5e9"
                     />
                   </View>
                   <View style={styles.attachmentInfo}>
-                    <Text style={styles.attachmentName}>{file.name}</Text>
-                    <Text style={styles.attachmentSize}>{file.size}</Text>
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {notification.attachment_path.split("/").pop()}
+                    </Text>
+                    <Text style={styles.attachmentType}>
+                      Nhấn để xem chi tiết
+                    </Text>
                   </View>
-                  <TouchableOpacity style={styles.downloadButton}>
-                    <MaterialIcons name="download" size={24} color="#475569" />
-                  </TouchableOpacity>
-                </View>
-              ))}
+                  <MaterialIcons
+                    name="file-download"
+                    size={24}
+                    color="#64748b"
+                  />
+                </TouchableOpacity>
+              )}
             </View>
-          </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -151,13 +213,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     height: 56,
     paddingHorizontal: 16,
-    backgroundColor: "rgba(248, 250, 252, 0.8)",
+    backgroundColor: "#f8fafc",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
@@ -179,102 +245,64 @@ const styles = StyleSheet.create({
     width: 40,
   },
   scrollContent: {
-    flexGrow: 1,
     paddingBottom: 24,
   },
   contentContainer: {
     padding: 16,
-    maxWidth: 600,
-    alignSelf: "center",
-    width: "100%",
   },
   infoArea: {
     marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#0f172a",
-    lineHeight: 32,
     marginBottom: 8,
+    lineHeight: 28,
   },
   metaInfo: {
     fontSize: 14,
     color: "#64748b",
   },
   article: {
-    gap: 16,
+    marginBottom: 24,
   },
   paragraph: {
     fontSize: 16,
     color: "#334155",
     lineHeight: 24,
+    marginBottom: 12,
   },
-  list: {
-    paddingLeft: 8,
-    gap: 8,
+  attachmentsSection: {
+    marginTop: 8,
   },
-  listItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#334155",
-    marginTop: 9,
-  },
-  listItemText: {
-    flex: 1,
+  sectionTitle: {
     fontSize: 16,
-    color: "#334155",
-    lineHeight: 24,
-  },
-  boldText: {
-    fontWeight: "bold",
+    fontWeight: "600",
     color: "#0f172a",
-  },
-  imageSection: {
-    marginTop: 24,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#e2e8f0",
-  },
-  bannerImage: {
-    width: "100%",
-    height: 200,
-  },
-  attachmentsArea: {
-    marginTop: 32,
-  },
-  attachmentsTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#0f172a",
-    marginBottom: 16,
-  },
-  attachmentsList: {
-    gap: 12,
+    marginBottom: 12,
   },
   attachmentItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
     backgroundColor: "#ffffff",
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    gap: 16,
+    marginBottom: 8,
   },
-  attachmentIconContainer: {
+  attachmentIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 8,
     backgroundColor: "#e0f2fe",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
   },
   attachmentInfo: {
     flex: 1,
@@ -285,17 +313,21 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     marginBottom: 2,
   },
-  attachmentSize: {
+  attachmentType: {
     fontSize: 12,
     color: "#64748b",
   },
-  downloadButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#f1f5f9",
+  imageContainer: {
+    width: "100%",
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  attachmentImage: {
+    width: "100%",
+    height: "100%",
   },
 });
 

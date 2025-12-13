@@ -1,6 +1,20 @@
 import db from "../config/db.js";
 
 const Room = {
+  countEmpty: async () => {
+    const [rows] = await db.query(
+      "SELECT COUNT(*) as count FROM rooms WHERE status = 'AVAILABLE'"
+    );
+    return rows[0].count;
+  },
+
+  countTotalCapacity: async () => {
+    const [rows] = await db.query(
+      "SELECT SUM(max_capacity) as total FROM rooms"
+    );
+    return rows[0].total || 0;
+  },
+
   getAll: async () => {
     const [rows] = await db.query("SELECT * FROM rooms");
     return rows;

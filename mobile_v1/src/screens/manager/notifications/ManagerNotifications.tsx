@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,13 @@ import {
   TextInput,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { notificationApi } from "../../../services/notificationApi";
 
 type ManagerNotificationsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -27,6 +30,7 @@ interface NotificationItem {
   title: string;
   date: string;
   status: "sent" | "draft";
+  content?: string;
 }
 
 const ManagerNotifications = ({ navigation }: Props) => {
@@ -34,27 +38,34 @@ const ManagerNotifications = ({ navigation }: Props) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const notifications: NotificationItem[] = [
-    {
-      id: "1",
-      title: "Thông báo về lịch cắt điện tòa A1 do bảo trì hệ thống",
-      date: "15/10/2023",
-      status: "sent",
-    },
-    {
-      id: "2",
-      title: "Lịch tổng vệ sinh KTX khu B",
-      date: "14/10/2023",
-      status: "sent",
-    },
-    {
-      id: "3",
-      title: "Kế hoạch tổ chức giải bóng đá sinh viên",
-      date: "12/10/2023",
-      status: "draft",
-    },
-  ];
+  useFocusEffect(
+    useCallback(() => {
+      fetchNotifications();
+    }, [])
+  );
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const data = await notificationApi.getManagerSentNotifications();
+      const formattedData = data.map((item: any) => ({
+        id: item.id.toString(),
+        title: item.title,
+        date: new Date(item.created_at).toLocaleDateString("vi-VN"),
+        status: "sent", // Assuming all fetched are sent for now
+        content: item.content,
+      }));
+      setNotifications(formattedData);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách thông báo");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredNotifications = notifications.filter((item) => {
     const matchesFilter = filter === "all" || item.status === filter;
@@ -109,11 +120,23 @@ const ManagerNotifications = ({ navigation }: Props) => {
         {
           text: "Xóa",
           style: "destructive",
-          onPress: () => {
-            // Logic xóa ở đây (API call)
-            console.log("Deleting:", Array.from(selectedIds));
-            setIsSelectionMode(false);
-            setSelectedIds(new Set());
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const idsToDelete = Array.from(selectedIds);
+              await Promise.all(
+                idsToDelete.map((id) => notificationApi.deleteNotification(id))
+              );
+              Alert.alert("Thành công", "Đã xóa các thông báo đã chọn");
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+              await fetchNotifications();
+            } catch (error) {
+              console.error("Error deleting notifications:", error);
+              Alert.alert("Lỗi", "Không thể xóa một số thông báo");
+            } finally {
+              setLoading(false);
+            }
           },
         },
       ]
@@ -248,12 +271,23 @@ const ManagerNotifications = ({ navigation }: Props) => {
       </View>
 
       {/* List */}
-      <FlatList
-        data={filteredNotifications}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-      />
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#0066CC" />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredNotifications}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.centerContainer}>
+              <Text style={styles.emptyText}>Không có thông báo nào</Text>
+            </View>
+          }
+        />
+      )}
 
       {/* FAB or Selection Footer */}
       {!isSelectionMode ? (
@@ -488,6 +522,17 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#64748b",
+    textAlign: "center",
   },
 });
 

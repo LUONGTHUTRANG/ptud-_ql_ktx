@@ -13,7 +13,7 @@ router.get(
 );
 router.get(
   "/room/:roomId",
-  authorizeRoles("admin", "manager"),
+  authorizeRoles("admin", "manager", "student"),
   studentController.getStudentsByRoomId
 );
 router.get(

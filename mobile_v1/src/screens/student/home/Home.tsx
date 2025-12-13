@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
 import BottomNav from "../../../components/BottomNav";
 import { Bill, MenuItem, User } from "../../../models";
+import { getMe } from "../../../services/authApi";
+import { getRoomById } from "../../../services/roomApi";
+import { getBuildingById } from "../../../services/buildingApi";
+import { studentApi } from "../../../services/studentApi";
+import { fetchInvoices } from "../../../services/invoiceApi";
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Home">;
 
@@ -21,13 +27,82 @@ interface Props {
 }
 
 const Home = ({ navigation }: Props) => {
-  const user: User = {
-    name: "An",
-    room: "404",
-    building: "B2",
-    roommate: "Lê Văn Hưng",
-    avatarUrl: "https://picsum.photos/100/100",
-  };
+  const [user, setUser] = useState<User | null>(null);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        // 1. Get current user
+        const userData = await getMe();
+
+        let roomName = "Chưa có";
+        let buildingName = "Chưa có";
+        let roommateName = "Không có";
+
+        // 2. Get room and building info if user has a room
+        if (userData.current_room_id) {
+          const roomData = await getRoomById(userData.current_room_id);
+          roomName = roomData.room_number;
+
+          if (roomData.building_id) {
+            const buildingData = await getBuildingById(roomData.building_id);
+            buildingName = buildingData.name;
+          }
+
+          // 3. Get roommates
+          const studentsInRoom = await studentApi.getStudentsByRoom(
+            userData.current_room_id
+          );
+          const roommates = studentsInRoom.filter(
+            (s: any) => s.id !== userData.id
+          );
+          if (roommates.length > 0) {
+            roommateName = roommates.map((s: any) => s.full_name).join(", ");
+          }
+        }
+
+        setUser({
+          name: userData.full_name,
+          room: roomName,
+          building: buildingName,
+          roommate: roommateName,
+          avatarUrl: "https://picsum.photos/100/100", // Placeholder
+        });
+
+        // 4. Get invoices
+        const allInvoices = await fetchInvoices();
+        // Filter invoices for this student
+        const myInvoices = allInvoices.filter(
+          (inv: any) => inv.student_id === userData.id && inv.status !== "PAID"
+        );
+
+        const formattedBills: Bill[] = myInvoices.map((inv: any) => ({
+          id: inv.id.toString(),
+          title:
+            inv.description ||
+            `Hóa đơn ${inv.type === "ROOM_FEE" ? "tiền phòng" : "điện nước"}`,
+          status: new Date(inv.due_date) < new Date() ? "overdue" : "pending",
+          amount: `${parseInt(inv.amount).toLocaleString("vi-VN")}đ`,
+          dueDate: new Date(inv.due_date).toLocaleDateString("vi-VN", {
+            day: "2-digit",
+            month: "2-digit",
+          }),
+          type: inv.type === "UTILITY_FEE" ? "utility" : "room",
+        }));
+
+        setBills(formattedBills);
+      } catch (error) {
+        console.error("Failed to load home data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
 
   const menuItems: (MenuItem & { path: keyof RootStackParamList | "#" })[] = [
     {
@@ -56,24 +131,31 @@ const Home = ({ navigation }: Props) => {
     },
   ];
 
-  const bills: Bill[] = [
-    {
-      id: "1",
-      title: "Tiền phòng - Tháng 09/2023",
-      status: "overdue",
-      amount: "2.500.000đ",
-      dueDate: "05/10",
-      type: "room",
-    },
-    {
-      id: "2",
-      title: "Tiền điện & nước - Tháng 10/2023",
-      status: "pending",
-      amount: "450.000đ",
-      dueDate: "30/10",
-      type: "utility",
-    },
-  ];
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <Text>Không thể tải thông tin người dùng</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -249,6 +331,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    maxWidth: "75%",
   },
   avatarContainer: {
     width: 40,

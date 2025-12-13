@@ -1,6 +1,13 @@
 import db from "../config/db.js";
 
 const SupportRequest = {
+  countPending: async () => {
+    const [rows] = await db.query(
+      "SELECT COUNT(*) as count FROM support_requests WHERE status = 'PENDING'"
+    );
+    return rows[0].count;
+  },
+
   create: async (data) => {
     const { student_id, type, title, content, attachment_path } = data;
     const [result] = await db.query(

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,16 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as DocumentPicker from "expo-document-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../../../types";
 import ConfirmModal from "../../../components/ConfirmModal";
+import { fetchBuildings } from "../../../services/buildingApi";
+import { createRegistration } from "../../../services/registrationApi";
 
 type SpecialRequestScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -25,22 +30,79 @@ interface Props {
 
 const SpecialRequest = ({ navigation }: Props) => {
   const [building, setBuilding] = useState("");
-  const [circumstance, setCircumstance] = useState("other"); // poor, disabled, other
+  const [circumstance, setCircumstance] = useState("OTHER"); // POOR_HOUSEHOLD, DISABILITY, OTHER
   const [note, setNote] = useState("");
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showBuildingDropdown, setShowBuildingDropdown] = useState(false);
+  const [buildings, setBuildings] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
 
-  // Mock file state
-  const [files, setFiles] = useState([
-    { name: "giay_chung_nhan_ho_ngheo.pdf", size: "1.2 MB" },
-  ]);
+  // File state
+  const [files, setFiles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Load user
+        const storedUser = await AsyncStorage.getItem("user");
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          setUserId(user.id);
+        }
+
+        // Load buildings
+        const buildingsData = await fetchBuildings();
+        const formattedBuildings = buildingsData.map((b: any) => ({
+          label: b.name,
+          value: b.id.toString(),
+        }));
+        setBuildings(formattedBuildings);
+      } catch (error) {
+        console.error("Failed to load data", error);
+        Alert.alert("Lỗi", "Không thể tải danh sách tòa nhà");
+      }
+    };
+    loadData();
+  }, []);
 
   const handleRemoveFile = (index: number) => {
     setFiles(files.filter((_, i) => i !== index));
   };
 
-  const handleAddFile = () => {
-    Alert.alert("Upload File", "This is a mock file upload.");
+  const handleAddFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "image/*",
+          "application/pdf",
+          "application/msword",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        
+        setFiles([
+          ...files,
+          {
+            uri: asset.uri,
+            name: asset.name,
+            type: asset.mimeType || "application/octet-stream",
+            size: asset.size
+              ? `${(asset.size / 1024 / 1024).toFixed(2)} MB`
+              : "Unknown",
+          },
+        ]);
+      }
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Lỗi", "Không thể chọn tệp");
+    }
   };
 
   const handleSubmit = () => {
@@ -48,27 +110,50 @@ const SpecialRequest = ({ navigation }: Props) => {
       Alert.alert("Lỗi", "Vui lòng chọn tòa nhà mong muốn.");
       return;
     }
+    if (!userId) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng.");
+      return;
+    }
     setShowConfirmModal(true);
   };
 
-  const handleConfirmSubmit = () => {
+  const handleConfirmSubmit = async () => {
     setShowConfirmModal(false);
-    // Simulate API call
-    setTimeout(() => {
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("student_id", userId!.toString());
+      formData.append("registration_type", "PRIORITY");
+      formData.append("desired_building_id", building);
+      formData.append("priority_category", circumstance);
+      formData.append("priority_description", note);
+
+      if (files.length > 0) {
+        // Append the first file as evidence
+        const file = files[0];
+        formData.append("evidence", {
+          uri: file.uri,
+          name: file.name,
+          type: file.type,
+        } as any);
+      }
+
+      await createRegistration(formData);
+
       Alert.alert("Thành công", "Đơn đăng ký đã được gửi thành công.", [
         {
           text: "OK",
-          onPress: () => navigation.navigate("RegisterAccommodation"),
+          onPress: () => navigation.navigate("RegisterAccommodation"), // Or navigate back/home
         },
       ]);
-    }, 500);
+    } catch (error: any) {
+      console.error("Registration failed", error);
+      Alert.alert("Lỗi", error.response?.data?.message || "Đăng ký thất bại");
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const buildings = [
-    { label: "Tòa A1", value: "a1" },
-    { label: "Tòa A2", value: "a2" },
-    { label: "Tòa B1", value: "b1" },
-  ];
 
   return (
     <View style={styles.container}>
@@ -148,15 +233,15 @@ const SpecialRequest = ({ navigation }: Props) => {
 
           <TouchableOpacity
             style={styles.radioOption}
-            onPress={() => setCircumstance("poor")}
+            onPress={() => setCircumstance("POOR_HOUSEHOLD")}
           >
             <View
               style={[
                 styles.radioCircle,
-                circumstance === "poor" && styles.radioCircleSelected,
+                circumstance === "POOR_HOUSEHOLD" && styles.radioCircleSelected,
               ]}
             >
-              {circumstance === "poor" && (
+              {circumstance === "POOR_HOUSEHOLD" && (
                 <View style={styles.radioInnerCircle} />
               )}
             </View>
@@ -167,15 +252,15 @@ const SpecialRequest = ({ navigation }: Props) => {
 
           <TouchableOpacity
             style={styles.radioOption}
-            onPress={() => setCircumstance("disabled")}
+            onPress={() => setCircumstance("DISABILITY")}
           >
             <View
               style={[
                 styles.radioCircle,
-                circumstance === "disabled" && styles.radioCircleSelected,
+                circumstance === "DISABILITY" && styles.radioCircleSelected,
               ]}
             >
-              {circumstance === "disabled" && (
+              {circumstance === "DISABILITY" && (
                 <View style={styles.radioInnerCircle} />
               )}
             </View>
@@ -184,15 +269,15 @@ const SpecialRequest = ({ navigation }: Props) => {
 
           <TouchableOpacity
             style={styles.radioOption}
-            onPress={() => setCircumstance("other")}
+            onPress={() => setCircumstance("OTHER")}
           >
             <View
               style={[
                 styles.radioCircle,
-                circumstance === "other" && styles.radioCircleSelected,
+                circumstance === "OTHER" && styles.radioCircleSelected,
               ]}
             >
-              {circumstance === "other" && (
+              {circumstance === "OTHER" && (
                 <View style={styles.radioInnerCircle} />
               )}
             </View>
@@ -219,14 +304,18 @@ const SpecialRequest = ({ navigation }: Props) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Minh chứng kèm theo</Text>
           <Text style={styles.helperText}>
-            Vui lòng tải lên các giấy tờ chứng minh hoàn cảnh (Định dạng: PDF,
+            Vui lòng tải lên các giấy tờ chứng minh hoàn cảnh (Định dạng: PDF, Word,
             JPG, PNG. Tối đa 5MB)
           </Text>
 
           {files.map((file, index) => (
             <View key={index} style={styles.fileItem}>
               <View style={styles.fileIcon}>
-                <MaterialIcons name="description" size={24} color="#64748b" />
+                <MaterialIcons 
+                  name={file.type?.includes('image') ? "image" : "description"} 
+                  size={24} 
+                  color="#64748b" 
+                />
               </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName}>{file.name}</Text>
@@ -257,11 +346,24 @@ const SpecialRequest = ({ navigation }: Props) => {
         title="Xác nhận gửi đơn"
         message="Bạn có chắc chắn muốn gửi đơn đăng ký này không? Thông tin sẽ không thể thay đổi sau khi gửi."
       />
+
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#0ea5e9" />
+        </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,20 @@ import {
   TextInput,
   StatusBar,
   Image,
+  ActivityIndicator,
+  Linking,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import {
+  getRegistrationById,
+  updateRegistrationStatus,
+} from "../../../services/registrationApi";
 
 type ManagerSpecialRequestDetailScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -29,54 +38,118 @@ interface Props {
   route: ManagerSpecialRequestDetailScreenRouteProp;
 }
 
+const API_BASE_URL = "http://192.168.1.67:5000";
+
 const ManagerSpecialRequestDetail = ({ navigation, route }: Props) => {
   const { id } = route.params;
   const [adminNotes, setAdminNotes] = useState("");
+  const [requestDetails, setRequestDetails] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Mock Data - In a real app, fetch based on ID
-  const requestDetails = {
-    id: "DK0815",
-    studentName: "Nguyễn Văn An",
-    studentId: "20210001",
-    avatarUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBBUB4OH9hQqt9TwjTSLMe-VYpomezF0ksqgoVFoEhjCp1w1pm4HmODYFrzfLFlkJoNQ9m9U5_CDo7eEkMAZXiuM06Z2Ay_OJ2jdW11r1DMnAMmHpWX3VTeqCRyvoUMcm_12CERIlfHBwRrq48M9zMYfUmQFxt-wNrnDHI2r8y2PCPTf69OrtWuI0ECdKVUi-xJr_-6zO1aytIttFb8Jfamcbw4f3ZVl2kLm1t-meScljaLKXWdyRz8IcQkuBvKRFg2mPPYiRQl0es",
-    status: "pending",
-    roomType: "Phòng 4 người, khép kín",
-    desiredBuilding: "Tòa nhà B5",
-    submissionDate: "15/08/2024",
-    circumstance:
-      "Gia đình em thuộc diện hộ nghèo, có giấy xác nhận của địa phương. Bố mẹ em tuổi đã cao và sức khỏe yếu, không thể lao động nặng. Em là lao động chính trong nhà nên rất mong được nhà trường xem xét hỗ trợ chỗ ở để giảm bớt gánh nặng chi phí.",
-    attachments: [
-      {
-        name: "giay_xac_nhan.pdf",
-        size: "1.2 MB",
-        type: "pdf",
-      },
-      {
-        name: "anh_so_ho_ngheo.jpg",
-        size: "3.5 MB",
-        type: "image",
-      },
-    ],
+  useEffect(() => {
+    fetchRequestDetails();
+  }, [id]);
+
+  const fetchRequestDetails = async () => {
+    try {
+      setLoading(true);
+      const data = await getRegistrationById(id);
+      setRequestDetails(data);
+      if (data.admin_note) {
+        setAdminNotes(data.admin_note);
+      }
+    } catch (error) {
+      console.error("Failed to fetch registration details", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateStatus = async (status: string) => {
+    try {
+      setLoading(true);
+      await updateRegistrationStatus(id, status, adminNotes);
+      Alert.alert("Thành công", "Cập nhật trạng thái thành công", [
+        { text: "OK", onPress: () => navigation.goBack() },
+      ]);
+    } catch (error) {
+      console.error("Failed to update registration status", error);
+      Alert.alert("Lỗi", "Không thể cập nhật trạng thái");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getStatusInfo = (status: string) => {
     switch (status) {
-      case "pending":
+      case "PENDING":
         return { label: "Chờ xử lý", color: "#d97706", bg: "#fef3c7" }; // amber-700, amber-100
-      case "approved":
+      case "APPROVED":
         return { label: "Đã duyệt", color: "#16a34a", bg: "#dcfce7" };
-      case "rejected":
+      case "REJECTED":
         return { label: "Từ chối", color: "#dc2626", bg: "#fee2e2" };
+      case "RETURN":
+        return { label: "Trả về", color: "#ca8a04", bg: "#fef9c3" }; // yellow-600, yellow-100
       default:
         return { label: "Không xác định", color: "#64748b", bg: "#f1f5f9" };
     }
   };
 
+  const getCircumstanceText = (category: string) => {
+    switch (category) {
+      case "POOR_HOUSEHOLD":
+        return "Hộ nghèo/Cận nghèo";
+      case "DISABILITY":
+        return "Khuyết tật";
+      case "OTHER":
+        return "Khác";
+      default:
+        return category;
+    }
+  };
+
+  const getFileIcon = (filePath: string) => {
+    const ext = filePath.split(".").pop()?.toLowerCase();
+    if (["jpg", "jpeg", "png", "gif"].includes(ext || "")) return "image";
+    if (ext === "pdf") return "picture-as-pdf";
+    if (["doc", "docx"].includes(ext || "")) return "description";
+    return "attach-file";
+  };
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (!requestDetails) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <Text>Không tìm thấy thông tin đơn đăng ký</Text>
+      </View>
+    );
+  }
+
   const statusInfo = getStatusInfo(requestDetails.status);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
       {/* Header */}
@@ -96,21 +169,25 @@ const ManagerSpecialRequestDetail = ({ navigation, route }: Props) => {
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Student Info */}
         <View style={styles.section}>
           <View style={styles.studentCard}>
             <Image
-              source={{ uri: requestDetails.avatarUrl }}
+              source={{
+                uri: requestDetails.avatar
+                  ? requestDetails.avatar
+                  : "https://ui-avatars.com/api/?name=" +
+                    requestDetails.student_name,
+              }}
               style={styles.avatar}
             />
             <View style={styles.studentInfo}>
               <Text style={styles.studentName}>
-                {requestDetails.studentName}
+                {requestDetails.student_name}
               </Text>
-              <Text style={styles.studentId}>
-                MSSV: {requestDetails.studentId}
-              </Text>
+              <Text style={styles.studentId}>MSSV: {requestDetails.mssv}</Text>
             </View>
             <View
               style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}
@@ -133,20 +210,25 @@ const ManagerSpecialRequestDetail = ({ navigation, route }: Props) => {
           <View style={styles.detailsCard}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Loại phòng</Text>
-              <Text style={styles.detailValue}>{requestDetails.roomType}</Text>
+              <Text style={styles.detailValue}>
+                {/* TODO: Fetch room type name if needed, currently not in join */}
+                Phòng tiêu chuẩn
+              </Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Tòa mong muốn</Text>
               <Text style={styles.detailValue}>
-                {requestDetails.desiredBuilding}
+                {requestDetails.building_name || "Không có"}
               </Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Ngày nộp đơn</Text>
               <Text style={styles.detailValue}>
-                {requestDetails.submissionDate}
+                {new Date(requestDetails.created_at).toLocaleDateString(
+                  "vi-VN"
+                )}
               </Text>
             </View>
           </View>
@@ -156,45 +238,58 @@ const ManagerSpecialRequestDetail = ({ navigation, route }: Props) => {
         <View style={styles.section}>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Lý do và Hoàn cảnh đặc biệt</Text>
+            <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
+              {getCircumstanceText(requestDetails.priority_category)}
+            </Text>
             <Text style={styles.circumstanceText}>
-              {requestDetails.circumstance}
+              {requestDetails.priority_description}
             </Text>
           </View>
         </View>
 
         {/* Attachments */}
-        <View style={styles.section}>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Minh chứng đính kèm</Text>
-            <View style={styles.attachmentList}>
-              {requestDetails.attachments.map((file, index) => (
-                <View key={index} style={styles.attachmentItem}>
+        {requestDetails.evidence_file_path && (
+          <View style={styles.section}>
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Minh chứng đính kèm</Text>
+              <View style={styles.attachmentList}>
+                <View style={styles.attachmentItem}>
                   <View
                     style={[
                       styles.attachmentIconContainer,
-                      file.type === "pdf"
-                        ? { backgroundColor: "#fee2e2" }
-                        : { backgroundColor: "#dbeafe" },
+                      { backgroundColor: "#dbeafe" },
                     ]}
                   >
                     <MaterialIcons
-                      name={file.type === "pdf" ? "description" : "image"}
+                      name={getFileIcon(requestDetails.evidence_file_path)}
                       size={24}
-                      color={file.type === "pdf" ? "#dc2626" : "#2563eb"}
+                      color="#2563eb"
                     />
                   </View>
                   <View style={styles.attachmentInfo}>
-                    <Text style={styles.attachmentName}>{file.name}</Text>
-                    <Text style={styles.attachmentSize}>{file.size}</Text>
+                    <Text style={styles.attachmentName} numberOfLines={1}>
+                      {requestDetails.evidence_file_path.split("/").pop()}
+                    </Text>
+                    <Text style={styles.attachmentSize}>Tệp đính kèm</Text>
                   </View>
-                  <TouchableOpacity style={styles.downloadButton}>
-                    <MaterialIcons name="download" size={20} color="#64748b" />
+                  <TouchableOpacity
+                    style={styles.downloadButton}
+                    onPress={() => {
+                      const url = `${API_BASE_URL}/${requestDetails.evidence_file_path}`;
+                      Linking.openURL(url);
+                    }}
+                  >
+                    <MaterialIcons
+                      name="open-in-new"
+                      size={20}
+                      color="#64748b"
+                    />
                   </TouchableOpacity>
                 </View>
-              ))}
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Admin Notes */}
         <View style={styles.section}>
@@ -217,18 +312,27 @@ const ManagerSpecialRequestDetail = ({ navigation, route }: Props) => {
       {/* Action Buttons */}
       <View style={styles.footer}>
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.rejectButton}>
+          <TouchableOpacity
+            style={styles.rejectButton}
+            onPress={() => handleUpdateStatus("REJECTED")}
+          >
             <Text style={styles.rejectButtonText}>Từ chối</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.approveButton}>
+          <TouchableOpacity
+            style={styles.approveButton}
+            onPress={() => handleUpdateStatus("APPROVED")}
+          >
             <Text style={styles.approveButtonText}>Phê duyệt</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.requestInfoButton}>
+        <TouchableOpacity
+          style={styles.requestInfoButton}
+          onPress={() => handleUpdateStatus("RETURN")}
+        >
           <Text style={styles.requestInfoText}>Yêu cầu thêm thông tin</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 

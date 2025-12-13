@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,14 @@ import {
   FlatList,
   TextInput,
   StatusBar,
+  ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { getAllPriorityRegistrations } from "../../../services/registrationApi";
 
 type ManagerSpecialRequestScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -27,49 +31,67 @@ interface SpecialRequestItem {
   studentId: string;
   circumstance: string;
   date: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "return";
 }
+
+const getCircumstanceText = (category: string) => {
+  switch (category) {
+    case "POOR_HOUSEHOLD":
+      return "Hộ nghèo/Cận nghèo";
+    case "DISABILITY":
+      return "Khuyết tật";
+    case "OTHER":
+      return "Khác";
+    default:
+      return category;
+  }
+};
 
 const ManagerSpecialRequest = ({ navigation }: Props) => {
   const [filter, setFilter] = useState<
-    "all" | "pending" | "approved" | "rejected"
+    "all" | "pending" | "approved" | "rejected" | "return"
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [requests, setRequests] = useState<SpecialRequestItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const requests: SpecialRequestItem[] = [
-    {
-      id: "1",
-      name: "Nguyễn Văn An",
-      studentId: "20181234",
-      circumstance: "Hộ nghèo",
-      date: "25/07/2024",
-      status: "pending",
-    },
-    {
-      id: "2",
-      name: "Trần Thị Bích",
-      studentId: "20195678",
-      circumstance: "Khuyết tật",
-      date: "24/07/2024",
-      status: "approved",
-    },
-    {
-      id: "3",
-      name: "Lê Minh Cường",
-      studentId: "20202468",
-      circumstance: "Mồ côi",
-      date: "23/07/2024",
-      status: "rejected",
-    },
-  ];
+  const fetchRequests = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await getAllPriorityRegistrations();
 
-  const filteredRequests = requests.filter((req) => {
-    const matchesFilter = filter === "all" || req.status === filter;
-    const matchesSearch =
-      req.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      req.studentId.includes(searchQuery);
-    return matchesFilter && matchesSearch;
-  });
+      const mappedRequests = response.data.map((item: any) => ({
+        id: item.id.toString(),
+        name: item.student_name,
+        studentId: item.mssv,
+        circumstance: getCircumstanceText(item.priority_category),
+        date: new Date(item.created_at).toLocaleDateString("vi-VN"),
+        status: item.status.toLowerCase(),
+      }));
+
+      setRequests(mappedRequests);
+    } catch (error) {
+      console.error("Failed to fetch priority registrations", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRequests();
+    }, [fetchRequests])
+  );
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter((req) => {
+      const matchesFilter = filter === "all" || req.status === filter;
+      const matchesSearch =
+        req.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        req.studentId.includes(searchQuery);
+      return matchesFilter && matchesSearch;
+    });
+  }, [requests, filter, searchQuery]);
 
   const getStatusColor = (status: SpecialRequestItem["status"]) => {
     switch (status) {
@@ -79,13 +101,37 @@ const ManagerSpecialRequest = ({ navigation }: Props) => {
         return "#4CAF50"; // Green
       case "rejected":
         return "#F44336"; // Red
+      case "return":
+        return "#FF9800"; // Orange
       default:
         return "#94a3b8";
     }
   };
 
+  const getStatusText = (status: SpecialRequestItem["status"]) => {
+    switch (status) {
+      case "pending":
+        return "Chờ duyệt";
+      case "approved":
+        return "Đã duyệt";
+      case "rejected":
+        return "Từ chối";
+      case "return":
+        return "Trả về";
+      default:
+        return "Không xác định";
+    }
+  };
+
   const renderItem = ({ item }: { item: SpecialRequestItem }) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() =>
+        navigation.navigate("ManagerSpecialRequestDetail", {
+          id: item.id,
+        })
+      }
+    >
       <View
         style={[
           styles.statusStrip,
@@ -98,16 +144,21 @@ const ManagerSpecialRequest = ({ navigation }: Props) => {
             <Text style={styles.studentName}>{item.name}</Text>
             <Text style={styles.studentId}>MSSV: {item.studentId}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.detailButtonCompact}
-            onPress={() =>
-              navigation.navigate("ManagerSpecialRequestDetail", {
-                id: item.id,
-              })
-            }
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusColor(item.status) + "20" }, // 20% opacity
+            ]}
           >
-            <Text style={styles.detailButtonTextCompact}>Chi tiết</Text>
-          </TouchableOpacity>
+            <Text
+              style={[
+                styles.statusText,
+                { color: getStatusColor(item.status) },
+              ]}
+            >
+              {getStatusText(item.status)}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.divider} />
@@ -123,8 +174,21 @@ const ManagerSpecialRequest = ({ navigation }: Props) => {
           </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -163,70 +227,92 @@ const ManagerSpecialRequest = ({ navigation }: Props) => {
 
       {/* Filter Chips */}
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[
-            styles.filterChip,
-            filter === "all" && styles.activeFilterChip,
-          ]}
-          onPress={() => setFilter("all")}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContent}
         >
-          <Text
+          <TouchableOpacity
             style={[
-              styles.filterText,
-              filter === "all" && styles.activeFilterText,
+              styles.filterChip,
+              filter === "all" && styles.activeFilterChip,
             ]}
+            onPress={() => setFilter("all")}
           >
-            Tất cả
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterChip,
-            filter === "pending" && styles.activeFilterChip,
-          ]}
-          onPress={() => setFilter("pending")}
-        >
-          <Text
+            <Text
+              style={[
+                styles.filterText,
+                filter === "all" && styles.activeFilterText,
+              ]}
+            >
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.filterText,
-              filter === "pending" && styles.activeFilterText,
+              styles.filterChip,
+              filter === "pending" && styles.activeFilterChip,
             ]}
+            onPress={() => setFilter("pending")}
           >
-            Chờ duyệt
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterChip,
-            filter === "approved" && styles.activeFilterChip,
-          ]}
-          onPress={() => setFilter("approved")}
-        >
-          <Text
+            <Text
+              style={[
+                styles.filterText,
+                filter === "pending" && styles.activeFilterText,
+              ]}
+            >
+              Chờ duyệt
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.filterText,
-              filter === "approved" && styles.activeFilterText,
+              styles.filterChip,
+              filter === "approved" && styles.activeFilterChip,
             ]}
+            onPress={() => setFilter("approved")}
           >
-            Đã duyệt
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterChip,
-            filter === "rejected" && styles.activeFilterChip,
-          ]}
-          onPress={() => setFilter("rejected")}
-        >
-          <Text
+            <Text
+              style={[
+                styles.filterText,
+                filter === "approved" && styles.activeFilterText,
+              ]}
+            >
+              Đã duyệt
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[
-              styles.filterText,
-              filter === "rejected" && styles.activeFilterText,
+              styles.filterChip,
+              filter === "rejected" && styles.activeFilterChip,
             ]}
+            onPress={() => setFilter("rejected")}
           >
-            Từ chối
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.filterText,
+                filter === "rejected" && styles.activeFilterText,
+              ]}
+            >
+              Từ chối
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              filter === "return" && styles.activeFilterChip,
+            ]}
+            onPress={() => setFilter("return")}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filter === "return" && styles.activeFilterText,
+              ]}
+            >
+              Trả về
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       {/* List */}
@@ -235,6 +321,8 @@ const ManagerSpecialRequest = ({ navigation }: Props) => {
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        refreshing={loading}
+        onRefresh={fetchRequests}
       />
     </View>
   );
@@ -304,9 +392,10 @@ const styles = StyleSheet.create({
     color: "#0f172a",
   },
   filterContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
     paddingBottom: 16,
+  },
+  filterContent: {
+    paddingHorizontal: 16,
     gap: 8,
   },
   filterChip: {
@@ -371,17 +460,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#64748b",
   },
-  detailButtonCompact: {
-    backgroundColor: "rgba(19, 109, 236, 0.1)",
+  statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
     marginLeft: 8,
   },
-  detailButtonTextCompact: {
+  statusText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#136dec",
   },
   divider: {
     height: 1,

@@ -9,13 +9,20 @@ import {
   StatusBar,
   ActivityIndicator,
   Modal,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RouteProp } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../../../types";
-import { getSupportRequestById } from "../../../services/requestApi";
+import {
+  getSupportRequestById,
+  updateSupportRequestStatus,
+} from "../../../services/requestApi";
 
 type RequestDetailScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -34,79 +41,95 @@ interface Props {
 const RequestDetail = ({ navigation, route }: Props) => {
   const { id } = route.params;
   const [role, setRole] = useState<"student" | "manager">("student");
+  const [userId, setUserId] = useState<number | null>(null);
   const [request, setRequest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
+  // Response Modal State
+  const [responseModalVisible, setResponseModalVisible] = useState(false);
+  const [responseStatus, setResponseStatus] = useState<
+    "PROCESSING" | "COMPLETED" | "CANCELLED"
+  >("PROCESSING");
+  const [responseContent, setResponseContent] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
-    const loadRole = async () => {
+    const loadRoleAndUser = async () => {
       try {
         const storedRole = await AsyncStorage.getItem("role");
+        const storedUser = await AsyncStorage.getItem("user");
+
         if (storedRole === "manager" || storedRole === "student") {
           setRole(storedRole);
         }
+
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          setUserId(user.id);
+        }
       } catch (e) {
-        console.error("Failed to load role", e);
+        console.error("Failed to load role or user", e);
       }
     };
-    loadRole();
+    loadRoleAndUser();
   }, []);
 
+  const fetchRequestDetail = async () => {
+    try {
+      const data = await getSupportRequestById(id);
+
+      // Map backend data to UI format
+      const mappedRequest = {
+        id: data.id.toString(),
+        code: `REQ${data.id}`,
+        type: getTypeText(data.type), // Map from data.type to Vietnamese
+        title: data.title, // Add title
+        date: new Date(data.created_at).toLocaleDateString("vi-VN"),
+        status: data.status.toLowerCase(),
+        statusText: getStatusText(data.status),
+        description: data.content,
+        images: data.attachment_url ? [data.attachment_url] : [],
+        timeline: [
+          // Create timeline based on status and dates
+          ...(data.status === "COMPLETED" ||
+          data.status === "PROCESSING" ||
+          data.status === "CANCELLED"
+            ? [
+                {
+                  status: getStatusText(data.status),
+                  time: new Date(
+                    data.updated_at || data.created_at
+                  ).toLocaleString("vi-VN"),
+                  user: data.manager_name || "Quản lý",
+                  comment:
+                    data.response_content || getStatusComment(data.status),
+                  active: true,
+                  icon: getStatusIcon(data.status),
+                  color: getStatusColor(data.status),
+                },
+              ]
+            : []),
+          {
+            status: "Đã gửi yêu cầu",
+            time: new Date(data.created_at).toLocaleString("vi-VN"),
+            user: data.student_name || "Bạn",
+            active: data.status === "PENDING",
+            icon: "receipt-long",
+            color: "slate",
+          },
+        ],
+      };
+
+      setRequest(mappedRequest);
+    } catch (error) {
+      console.error("Failed to fetch request detail", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchRequestDetail = async () => {
-      try {
-        const data = await getSupportRequestById(id);
-
-        // Map backend data to UI format
-        const mappedRequest = {
-          id: data.id.toString(),
-          code: `REQ${data.id}`,
-          type: getTypeText(data.type), // Map from data.type to Vietnamese
-          title: data.title, // Add title
-          date: new Date(data.created_at).toLocaleDateString("vi-VN"),
-          status: data.status.toLowerCase(),
-          statusText: getStatusText(data.status),
-          description: data.content,
-          images: data.attachment_url ? [data.attachment_url] : [],
-          timeline: [
-            // Create timeline based on status and dates
-            ...(data.status === "COMPLETED" ||
-            data.status === "PROCESSING" ||
-            data.status === "CANCELLED"
-              ? [
-                  {
-                    status: getStatusText(data.status),
-                    time: new Date(
-                      data.updated_at || data.created_at
-                    ).toLocaleString("vi-VN"),
-                    user: data.manager_name || "Quản lý",
-                    comment:
-                      data.response_content || getStatusComment(data.status),
-                    active: true,
-                    icon: getStatusIcon(data.status),
-                    color: getStatusColor(data.status),
-                  },
-                ]
-              : []),
-            {
-              status: "Đã gửi yêu cầu",
-              time: new Date(data.created_at).toLocaleString("vi-VN"),
-              user: data.student_name || "Bạn",
-              active: data.status === "PENDING",
-              icon: "receipt-long",
-              color: "slate",
-            },
-          ],
-        };
-
-        setRequest(mappedRequest);
-      } catch (error) {
-        console.error("Failed to fetch request detail", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (id) {
       fetchRequestDetail();
     }
@@ -179,6 +202,51 @@ const RequestDetail = ({ navigation, route }: Props) => {
         return "Đề xuất";
       default:
         return type;
+    }
+  };
+
+  const handleOpenResponse = (
+    status: "PROCESSING" | "COMPLETED" | "CANCELLED"
+  ) => {
+    setResponseStatus(status);
+    setResponseContent("");
+    setResponseModalVisible(true);
+  };
+
+  const handleSendResponse = async () => {
+    if (!responseContent.trim()) {
+      Alert.alert("Lỗi", "Vui lòng nhập nội dung phản hồi");
+      return;
+    }
+
+    if (!userId) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await updateSupportRequestStatus(id, {
+        status: responseStatus,
+        manager_id: userId,
+        response_content: responseContent,
+      });
+
+      Alert.alert("Thành công", "Đã gửi phản hồi", [
+        {
+          text: "OK",
+          onPress: () => {
+            setResponseModalVisible(false);
+            // Refresh data
+            fetchRequestDetail();
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error("Error updating support request status:", error);
+      Alert.alert("Lỗi", "Không thể gửi phản hồi");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -333,10 +401,16 @@ const RequestDetail = ({ navigation, route }: Props) => {
           {/* Action Buttons - Only visible to Managers */}
           {role === "manager" && (
             <View style={styles.managerActions}>
-              <TouchableOpacity style={styles.rejectButton}>
+              <TouchableOpacity
+                style={styles.rejectButton}
+                onPress={() => handleOpenResponse("CANCELLED")}
+              >
                 <Text style={styles.rejectButtonText}>Hủy Yêu cầu</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.respondButton}>
+              <TouchableOpacity
+                style={styles.respondButton}
+                onPress={() => handleOpenResponse("PROCESSING")}
+              >
                 <Text style={styles.respondButtonText}>Gửi Phản Hồi</Text>
               </TouchableOpacity>
             </View>
@@ -344,6 +418,7 @@ const RequestDetail = ({ navigation, route }: Props) => {
         </View>
       </ScrollView>
 
+      {/* Image Modal */}
       <Modal
         visible={selectedImage !== null}
         transparent={true}
@@ -362,6 +437,114 @@ const RequestDetail = ({ navigation, route }: Props) => {
             resizeMode="contain"
           />
         </View>
+      </Modal>
+
+      {/* Response Modal */}
+      <Modal
+        visible={responseModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setResponseModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.responseModalContainer}
+        >
+          <View style={styles.responseModalContent}>
+            <View style={styles.responseModalHeader}>
+              <Text style={styles.responseModalTitle}>Gửi Phản Hồi</Text>
+              <TouchableOpacity onPress={() => setResponseModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Trạng thái mới:</Text>
+            <View style={styles.statusOptions}>
+              <TouchableOpacity
+                style={[
+                  styles.statusOption,
+                  responseStatus === "PROCESSING"
+                    ? { backgroundColor: "#fb923c", borderColor: "#fb923c" }
+                    : { borderColor: "#fb923c", backgroundColor: "#fff" },
+                ]}
+                onPress={() => setResponseStatus("PROCESSING")}
+              >
+                <Text
+                  style={[
+                    styles.statusOptionText,
+                    responseStatus === "PROCESSING"
+                      ? { color: "#fff" }
+                      : { color: "#fb923c" },
+                  ]}
+                >
+                  Đang xử lý
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.statusOption,
+                  responseStatus === "COMPLETED"
+                    ? { backgroundColor: "#4ade80", borderColor: "#4ade80" }
+                    : { borderColor: "#4ade80", backgroundColor: "#fff" },
+                ]}
+                onPress={() => setResponseStatus("COMPLETED")}
+              >
+                <Text
+                  style={[
+                    styles.statusOptionText,
+                    responseStatus === "COMPLETED"
+                      ? { color: "#fff" }
+                      : { color: "#16a34a" },
+                  ]}
+                >
+                  Hoàn thành
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.statusOption,
+                  responseStatus === "CANCELLED"
+                    ? { backgroundColor: "#ef4444", borderColor: "#ef4444" }
+                    : { borderColor: "#ef4444", backgroundColor: "#fff" },
+                ]}
+                onPress={() => setResponseStatus("CANCELLED")}
+              >
+                <Text
+                  style={[
+                    styles.statusOptionText,
+                    responseStatus === "CANCELLED"
+                      ? { color: "#fff" }
+                      : { color: "#ef4444" },
+                  ]}
+                >
+                  Hủy bỏ
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>Nội dung phản hồi:</Text>
+            <TextInput
+              style={styles.responseInput}
+              multiline
+              placeholder="Nhập nội dung phản hồi cho sinh viên..."
+              value={responseContent}
+              onChangeText={setResponseContent}
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleSendResponse}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitButtonText}>Gửi Phản Hồi</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -581,6 +764,81 @@ const styles = StyleSheet.create({
   fullImage: {
     width: "100%",
     height: "80%",
+  },
+  responseModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  responseModalContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    minHeight: 400,
+  },
+  responseModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  responseModalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0f172a",
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  statusOptions: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  statusOption: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+  },
+  statusOptionActive: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 2,
+  },
+  statusOptionText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  responseInput: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+    height: 120,
+    backgroundColor: "#f8fafc",
+    fontSize: 14,
+    color: "#0f172a",
+  },
+  submitButton: {
+    backgroundColor: "#0ea5e9",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 24,
+  },
+  submitButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });
 

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,18 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import {
+  getAllSemesters,
+  deleteSemester,
+  Semester,
+} from "../../../services/semesterApi";
 
 type ManagerTermScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -28,35 +36,80 @@ interface TermItem {
   regular: { start: string; end: string };
   special: { start: string; end: string };
   extension: { start: string; end: string };
+  raw: Semester;
 }
 
+const formatDate = (dateString: string) => {
+  if (!dateString) return "Chưa thiết lập";
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch (e) {
+    return "Lỗi định dạng";
+  }
+};
+
 const ManagerTerm = ({ navigation }: Props) => {
-  const terms: TermItem[] = [
-    {
-      id: "1",
-      title: "Học kỳ I 2024-2025",
-      status: "active",
-      regular: { start: "08:00 01/08/2024", end: "17:00 15/08/2024" },
-      special: { start: "08:00 25/07/2024", end: "17:00 31/07/2024" },
-      extension: { start: "08:00 16/08/2024", end: "17:00 20/08/2024" },
-    },
-    {
-      id: "2",
-      title: "Học kỳ II 2024-2025",
-      status: "upcoming",
-      regular: { start: "08:00 01/01/2025", end: "17:00 15/01/2025" },
-      special: { start: "08:00 25/12/2024", end: "17:00 31/12/2024" },
-      extension: { start: "08:00 16/01/2025", end: "17:00 20/01/2025" },
-    },
-    {
-      id: "3",
-      title: "Học kỳ Hè 2024",
-      status: "ended",
-      regular: { start: "08:00 01/06/2024", end: "17:00 15/06/2024" },
-      special: { start: "08:00 25/05/2024", end: "17:00 31/05/2024" },
-      extension: { start: "08:00 16/06/2024", end: "17:00 20/06/2024" },
-    },
-  ];
+  const [terms, setTerms] = useState<TermItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchTerms = async () => {
+    try {
+      const data = await getAllSemesters();
+      const mappedTerms: TermItem[] = data.map((item) => {
+        let status: TermItem["status"] = item.is_active ? "active" : "ended";
+        const now = new Date();
+        const startDate = new Date(item.start_date);
+        if (startDate > now) {
+          status = "upcoming";
+        }
+
+        return {
+          id: item.id.toString(),
+          title: `Học kỳ ${item.term} năm học ${item.academic_year}`,
+          status: status,
+          regular: {
+            start: formatDate(item.registration_open_date),
+            end: formatDate(item.registration_close_date),
+          },
+          special: {
+            start: formatDate(item.start_date),
+            end: formatDate(item.end_date),
+          },
+          extension: {
+            start: formatDate(item.renewal_open_date),
+            end: formatDate(item.renewal_close_date),
+          },
+          raw: item,
+        };
+      });
+      setTerms(mappedTerms);
+    } catch (error) {
+      console.error("Failed to fetch terms", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách kỳ học");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTerms();
+    }, [])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTerms();
+  };
 
   const getStatusInfo = (status: TermItem["status"]) => {
     switch (status) {
@@ -75,10 +128,32 @@ const ManagerTerm = ({ navigation }: Props) => {
       {
         text: "Xóa",
         style: "destructive",
-        onPress: () => console.log("Deleted term", id),
+        onPress: async () => {
+          try {
+            await deleteSemester(id);
+            Alert.alert("Thành công", "Đã xóa kỳ học");
+            fetchTerms();
+          } catch (error) {
+            console.error("Failed to delete term", error);
+            Alert.alert("Lỗi", "Không thể xóa kỳ học");
+          }
+        },
       },
     ]);
   };
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -96,102 +171,117 @@ const ManagerTerm = ({ navigation }: Props) => {
         <View style={styles.headerRight} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {terms.map((term) => {
-          const statusInfo = getStatusInfo(term.status);
-          return (
-            <View key={term.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{term.title}</Text>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: statusInfo.bg },
-                  ]}
-                >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {terms.length === 0 ? (
+          <View style={{ alignItems: "center", marginTop: 50 }}>
+            <Text style={{ color: "#64748b" }}>Chưa có kỳ học nào</Text>
+          </View>
+        ) : (
+          terms.map((term) => {
+            const statusInfo = getStatusInfo(term.status);
+            return (
+              <View key={term.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>{term.title}</Text>
                   <View
                     style={[
-                      styles.statusDot,
-                      { backgroundColor: statusInfo.text },
+                      styles.statusBadge,
+                      { backgroundColor: statusInfo.bg },
                     ]}
-                  />
-                  <Text style={[styles.statusText, { color: statusInfo.text }]}>
-                    {statusInfo.label}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.cardBody}>
-                <View style={styles.infoRow}>
-                  <MaterialIcons
-                    name="calendar-today"
-                    size={20}
-                    color="#94a3b8"
-                    style={styles.infoIcon}
-                  />
-                  <View>
-                    <Text style={styles.infoLabel}>Đăng ký thông thường</Text>
-                    <Text style={styles.infoValue}>
-                      Mở: {term.regular.start} - Đóng: {term.regular.end}
+                  >
+                    <View
+                      style={[
+                        styles.statusDot,
+                        { backgroundColor: statusInfo.text },
+                      ]}
+                    />
+                    <Text
+                      style={[styles.statusText, { color: statusInfo.text }]}
+                    >
+                      {statusInfo.label}
                     </Text>
                   </View>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <MaterialIcons
-                    name="verified-user"
-                    size={20}
-                    color="#136dec"
-                    style={styles.infoIcon}
-                  />
-                  <View>
-                    <Text style={styles.infoLabel}>Đơn hoàn cảnh đặc biệt</Text>
-                    <Text style={styles.infoValue}>
-                      Mở: {term.special.start} - Đóng: {term.special.end}
-                    </Text>
+                <View style={styles.cardBody}>
+                  <View style={styles.infoRow}>
+                    <MaterialIcons
+                      name="calendar-today"
+                      size={20}
+                      color="#94a3b8"
+                      style={styles.infoIcon}
+                    />
+                    <View>
+                      <Text style={styles.infoLabel}>Đăng ký thông thường</Text>
+                      <Text style={styles.infoValue}>
+                        Mở: {term.regular.start} - Đóng: {term.regular.end}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <MaterialIcons
+                      name="verified-user"
+                      size={20}
+                      color="#136dec"
+                      style={styles.infoIcon}
+                    />
+                    <View>
+                      <Text style={styles.infoLabel}>
+                        Đơn hoàn cảnh đặc biệt
+                      </Text>
+                      <Text style={styles.infoValue}>
+                        Mở: {term.special.start} - Đóng: {term.special.end}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <MaterialIcons
+                      name="autorenew"
+                      size={20}
+                      color="#f97316"
+                      style={styles.infoIcon}
+                    />
+                    <View>
+                      <Text style={styles.infoLabel}>Gia hạn chỗ ở</Text>
+                      <Text style={styles.infoValue}>
+                        Mở: {term.extension.start} - Đóng: {term.extension.end}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
-                <View style={styles.infoRow}>
-                  <MaterialIcons
-                    name="autorenew"
-                    size={20}
-                    color="#f97316"
-                    style={styles.infoIcon}
-                  />
-                  <View>
-                    <Text style={styles.infoLabel}>Gia hạn chỗ ở</Text>
-                    <Text style={styles.infoValue}>
-                      Mở: {term.extension.start} - Đóng: {term.extension.end}
-                    </Text>
-                  </View>
+                <View style={styles.cardActions}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() =>
+                      navigation.navigate("ManagerTermDetail", {
+                        mode: "edit",
+                        term,
+                      })
+                    }
+                  >
+                    <MaterialIcons name="edit" size={20} color="#136dec" />
+                    <Text style={styles.editButtonText}>Chỉnh sửa</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDelete(term.id)}
+                  >
+                    <MaterialIcons name="delete" size={20} color="#ef4444" />
+                    <Text style={styles.deleteButtonText}>Xóa</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() =>
-                    navigation.navigate("ManagerTermDetail", {
-                      mode: "edit",
-                      term,
-                    })
-                  }
-                >
-                  <MaterialIcons name="edit" size={20} color="#136dec" />
-                  <Text style={styles.editButtonText}>Chỉnh sửa</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => handleDelete(term.id)}
-                >
-                  <MaterialIcons name="delete" size={20} color="#ef4444" />
-                  <Text style={styles.deleteButtonText}>Xóa</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Bottom Action Button */}

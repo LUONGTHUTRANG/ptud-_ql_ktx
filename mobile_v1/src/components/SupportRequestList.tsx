@@ -54,13 +54,13 @@ const SupportRequestList = ({
 
   const statusOptions = [
     "Tất cả",
+    "Mới",
     "Đang xử lý",
     "Hoàn thành",
     "Từ chối",
-    "Chờ xử lý",
   ];
   const typeOptions = ["Tất cả", "Sửa chữa", "Khiếu nại", "Đề xuất"];
-  const buildingOptions = ["Tất cả", "B1", "B2", "B3"];
+  const buildingOptions = ["Tất cả", "C1", "C2", "C3"];
 
   const handleOpenFilter = (type: "status" | "type" | "building") => {
     setActiveFilterType(type);
@@ -76,6 +76,48 @@ const SupportRequestList = ({
     }
     setModalVisible(false);
   };
+
+  const filteredData = React.useMemo(() => {
+    return data.filter((item) => {
+      // 1. Search Query
+      const query = searchQuery.toLowerCase();
+      const matchesSearch =
+        item.code.toLowerCase().includes(query) ||
+        (item.title && item.title.toLowerCase().includes(query)) ||
+        (item.studentName && item.studentName.toLowerCase().includes(query)) ||
+        item.room.toLowerCase().includes(query);
+
+      if (!matchesSearch) return false;
+
+      // 2. Status Filter
+      if (selectedFilters.status !== "Tất cả") {
+        const statusMap: Record<string, string> = {
+          "Đang xử lý": "pending",
+          "Hoàn thành": "completed",
+          "Từ chối": "rejected",
+          Mới: "new",
+        };
+        if (item.status !== statusMap[selectedFilters.status]) return false;
+      }
+
+      // 3. Type Filter
+      if (selectedFilters.type !== "Tất cả") {
+        const typeMap: Record<string, string> = {
+          "Sửa chữa": "repair",
+          "Khiếu nại": "complaint",
+          "Đề xuất": "proposal",
+        };
+        if (item.type !== typeMap[selectedFilters.type]) return false;
+      }
+
+      // 4. Building Filter
+      if (selectedFilters.building !== "Tất cả") {
+        if (!item.room.includes(selectedFilters.building)) return false;
+      }
+
+      return true;
+    });
+  }, [data, searchQuery, selectedFilters]);
 
   const getActiveOptions = () => {
     switch (activeFilterType) {
@@ -347,7 +389,7 @@ const SupportRequestList = ({
 
       {/* List */}
       <FlatList
-        data={data}
+        data={filteredData}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}

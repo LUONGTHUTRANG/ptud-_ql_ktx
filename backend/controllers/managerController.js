@@ -1,4 +1,31 @@
 import Manager from "../models/managerModel.js";
+import Student from "../models/studentModel.js";
+import Room from "../models/roomModel.js";
+import Registration from "../models/registrationModel.js";
+import SupportRequest from "../models/supportRequestModel.js";
+import Invoice from "../models/invoiceModel.js";
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    const totalStudents = await Student.countAll();
+    const emptyRooms = await Room.countEmpty();
+    const newRegistrations = await Registration.countNew();
+    const pendingRequests = await SupportRequest.countPending();
+    const overdueInvoices = await Invoice.countOverdue();
+    const totalCapacity = await Room.countTotalCapacity();
+
+    res.json({
+      totalStudents,
+      emptyRooms,
+      newRegistrations,
+      pendingRequests,
+      overdueInvoices,
+      totalCapacity,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
 
 export const getAllManagers = async (req, res) => {
   try {

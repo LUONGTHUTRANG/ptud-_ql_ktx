@@ -41,15 +41,15 @@ const ManagerServices = ({ navigation }: Props) => {
     },
     {
       title: "Yêu cầu hỗ trợ",
-      description: "Xử lý các yêu cầu sửa chữa từ sinh viên.",
+      description: "Xử lý các yêu cầu hỗ trợ từ sinh viên.",
       icon: "support-agent",
       iconColor: "#ea580c", // text-orange-600
       iconBg: "#ffedd5", // bg-orange-100
       path: "ManagerRegularRequest",
     },
     {
-      title: "Yêu cầu đặc biệt",
-      description: "Duyệt các đơn xin ra vào muộn, vắng mặt...",
+      title: "Duyệt đơn đặc biệt",
+      description: "Duyệt đơn đăng ký ở cho hoàn cảnh đặc biệt.",
       icon: "assignment-late",
       iconColor: "#db2777", // text-pink-600
       iconBg: "#fce7f3", // bg-pink-100

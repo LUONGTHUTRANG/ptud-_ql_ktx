@@ -33,3 +33,16 @@ export const getSupportRequestById = async (id: string) => {
     throw error;
   }
 };
+
+export const updateSupportRequestStatus = async (
+  id: string,
+  data: { status: string; manager_id: number; response_content: string }
+) => {
+  try {
+    const response = await api.put(`/support-requests/${id}/status`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Error updating support request status:", error);
+    throw error;
+  }
+};

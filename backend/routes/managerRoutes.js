@@ -7,6 +7,12 @@ const router = express.Router();
 // Protect all routes
 router.use(verifyToken);
 
+router.get(
+  "/dashboard/stats",
+  authorizeRoles("manager", "admin"),
+  managerController.getDashboardStats
+);
+
 router.get("/", authorizeRoles("admin"), managerController.getAllManagers);
 router.get("/:id", authorizeRoles("admin"), managerController.getManagerById);
 router.post("/", authorizeRoles("admin"), managerController.createManager);

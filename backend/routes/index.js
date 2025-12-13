@@ -7,6 +7,8 @@ import invoiceRoutes from "./invoiceRoutes.js";
 import studentRoutes from "./studentRoutes.js";
 import supportRequestRoutes from "./supportRequestRoutes.js";
 import authRoutes from "./authRoutes.js";
+import notificationRoutes from "./notificationRoutes.js";
+import registrationRoutes from "./registrationRoutes.js";
 
 const router = express.Router();
 
@@ -18,5 +20,7 @@ router.use("/rooms", roomRoutes);
 router.use("/invoices", invoiceRoutes);
 router.use("/students", studentRoutes);
 router.use("/support-requests", supportRequestRoutes);
+router.use("/notifications", notificationRoutes);
+router.use("/registrations", registrationRoutes);
 
 export default router;

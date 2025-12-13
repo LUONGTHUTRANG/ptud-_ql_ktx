@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,9 +10,12 @@ import {
   Dimensions,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../../../types";
 import BottomNav from "../../../components/BottomNav";
+import { managerApi } from "../../../services/managerApi";
 
 type ManagerHomeScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -24,18 +27,79 @@ interface Props {
 }
 
 const ManagerHome = ({ navigation }: Props) => {
-  const user = {
-    name: "Minh Anh",
-    avatarUrl:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAmB15ln7Wmm2s23yx4ofXpFGt8U1GzxnVwc1D1bhGvM7Ra4vRKDZc9NuuSxfCoHk3AjumpcpF7yoLm1VJKoVmx-ceynKGPCeSpkkx9uOSUgP-GLiTg1vL_V5XuNBoK2MuShJEKtrHHSatF--Cj_Th3gF6b2GUz62viuozwhpscW5nntx5zV48IlHYh-zeS6inzgtvqeJXZAuZzcPaQ4v4RestFofrVqrK1rVEJVpNxlVCsrtV1XVSiw47NqoWBxr9lWvcZ0ryXgKc",
-  };
+  const [user, setUser] = useState({
+    name: "",
+    avatarUrl: "https://ui-avatars.com/api/?background=random",
+  });
+
+  const [statsData, setStatsData] = useState({
+    totalStudents: 0,
+    emptyRooms: 0,
+    newRegistrations: 0,
+    pendingRequests: 0,
+    overdueInvoices: 0,
+    totalCapacity: 1, // Avoid division by zero
+  });
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchData = async () => {
+        try {
+          const userData = await AsyncStorage.getItem("user");
+          if (userData) {
+            const parsedUser = JSON.parse(userData);
+            console.log("Parsed User:", parsedUser);
+            setUser({
+              name: parsedUser.fullName,
+              avatarUrl:
+                parsedUser.avatarUrl ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                  parsedUser.fullName
+                )}&background=random`,
+            });
+          }
+
+          const data = await managerApi.getDashboardStats();
+          setStatsData({
+            ...data,
+            totalCapacity: data.totalCapacity || 1,
+          });
+        } catch (error) {
+          console.error("Failed to fetch dashboard stats", error);
+        }
+      };
+
+      fetchData();
+    }, [])
+  );
 
   const stats = [
-    { label: "Tổng sinh viên", value: "850", color: "#0f172a" },
-    { label: "Phòng trống", value: "25", color: "#0f172a" },
-    { label: "Đơn đăng ký mới", value: "12", color: "#eab308" },
-    { label: "Yêu cầu cần xử lý", value: "5", color: "#ef4444" },
+    {
+      label: "Tổng sinh viên",
+      value: statsData.totalStudents.toString(),
+      color: "#0f172a",
+    },
+    {
+      label: "Phòng trống",
+      value: statsData.emptyRooms.toString(),
+      color: "#0f172a",
+    },
+    {
+      label: "Đơn đăng ký mới",
+      value: statsData.newRegistrations.toString(),
+      color: "#eab308",
+    },
+    {
+      label: "Yêu cầu cần xử lý",
+      value: statsData.pendingRequests.toString(),
+      color: "#ef4444",
+    },
   ];
+
+  const occupancyRate = Math.round(
+    (statsData.totalStudents / statsData.totalCapacity) * 100
+  );
+  const emptySlots = statsData.totalCapacity - statsData.totalStudents;
 
   const quickAccessItems = [
     {
@@ -118,21 +182,25 @@ const ManagerHome = ({ navigation }: Props) => {
         </View>
 
         {/* Warning Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cảnh báo</Text>
-          <TouchableOpacity style={styles.warningCard}>
-            <View style={styles.warningIconContainer}>
-              <MaterialIcons name="receipt-long" size={24} color="#dc2626" />
-            </View>
-            <View style={styles.warningContent}>
-              <Text style={styles.warningTitle}>5 hóa đơn đã quá hạn</Text>
-              <Text style={styles.warningSubtitle}>
-                Nhấn để xem chi tiết danh sách
-              </Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={24} color="#64748b" />
-          </TouchableOpacity>
-        </View>
+        {statsData.overdueInvoices > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cảnh báo</Text>
+            <TouchableOpacity style={styles.warningCard}>
+              <View style={styles.warningIconContainer}>
+                <MaterialIcons name="receipt-long" size={24} color="#dc2626" />
+              </View>
+              <View style={styles.warningContent}>
+                <Text style={styles.warningTitle}>
+                  {statsData.overdueInvoices} hóa đơn đã quá hạn
+                </Text>
+                <Text style={styles.warningSubtitle}>
+                  Nhấn để xem chi tiết danh sách
+                </Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color="#64748b" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Occupancy Rate */}
         <View style={styles.section}>
@@ -141,18 +209,22 @@ const ManagerHome = ({ navigation }: Props) => {
             <View style={styles.chartContainer}>
               {/* Simple Circular Progress Representation */}
               <View style={styles.chartCircle}>
-                <Text style={styles.chartPercentage}>94%</Text>
+                <Text style={styles.chartPercentage}>{occupancyRate}%</Text>
                 <Text style={styles.chartLabel}>Đã lấp đầy</Text>
               </View>
             </View>
             <View style={styles.occupancyStats}>
               <View style={styles.occupancyRow}>
                 <View style={[styles.dot, { backgroundColor: "#0ea5e9" }]} />
-                <Text style={styles.occupancyText}>Đã có người ở: 850</Text>
+                <Text style={styles.occupancyText}>
+                  Đã có người ở: {statsData.totalStudents}
+                </Text>
               </View>
               <View style={styles.occupancyRow}>
                 <View style={[styles.dot, { backgroundColor: "#e2e8f0" }]} />
-                <Text style={styles.occupancyText}>Còn trống: 50</Text>
+                <Text style={styles.occupancyText}>
+                  Còn trống: {emptySlots}
+                </Text>
               </View>
             </View>
           </View>

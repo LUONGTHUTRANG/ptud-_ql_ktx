@@ -24,8 +24,11 @@ const ManagerRegularRequest = ({ navigation }: Props) => {
     setIsLoading(true);
     try {
       const response = await getSupportRequests();
+      // response is the body: { data: [...], meta: ... }
+      // So response.data is the array of requests
+      const requestsData = response.data || [];
 
-      const mappedData: RequestItem[] = response.data.data.map((item: any) => {
+      const mappedData: RequestItem[] = requestsData.map((item: any) => {
         let type: RequestItem["type"] = "repair";
         if (item.type === "COMPLAINT") type = "complaint";
         if (item.type === "PROPOSAL") type = "proposal";
