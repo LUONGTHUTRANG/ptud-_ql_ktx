@@ -9,6 +9,7 @@ import Login from "./src/screens/auth/Login";
 import Home from "./src/screens/student/home/Home";
 import Services from "./src/screens/student/services/Services";
 import Bills from "./src/screens/student/bills/Bills";
+import BillDetail from "./src/screens/student/bills/BillDetail";
 import Notifications from "./src/screens/student/notifications/Notifications";
 import Settings from "./src/screens/student/profile/Settings";
 import ManagerHome from "./src/screens/manager/home/ManagerHome";
@@ -22,7 +23,7 @@ import CreateRequest from "./src/screens/student/requests/CreateRequest";
 import TransactionHistory from "./src/screens/student/bills/TransactionHistory";
 import BuildingList from "./src/screens/manager/buildings/BuildingList";
 import RoomList from "./src/screens/manager/buildings/RoomList";
-import RegisterAccommodation from "./src/screens/student/services/RegisterAccommodation"; 
+import RegisterAccommodation from "./src/screens/student/services/RegisterAccommodation";
 import ExtendAccommodation from "./src/screens/student/services/ExtendAccommodation";
 import RegularRequest from "./src/screens/student/requests/RegularRequest";
 import SpecialRequest from "./src/screens/student/requests/SpecialRequest";
@@ -58,6 +59,7 @@ const App = () => {
 
             <Stack.Screen name="Services" component={Services} />
             <Stack.Screen name="Bills" component={Bills} />
+            <Stack.Screen name="BillDetail" component={BillDetail} />
             <Stack.Screen name="Notifications" component={Notifications} />
             <Stack.Screen name="Settings" component={Settings} />
 

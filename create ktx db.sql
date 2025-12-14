@@ -163,19 +163,19 @@ INSERT INTO stay_records (
     student_id, room_id, semester_id, start_date, end_date, status
 ) VALUES
 (
-    1, 101, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 1 ở phòng 101, đang hoạt động
+    1, 15, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 1 ở phòng 101, đang hoạt động
 ),
 (
-    2, 101, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 2 ở phòng 101 (cùng phòng), đang hoạt động
+    2, 15, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 2 ở phòng 101 (cùng phòng), đang hoạt động
 ),
 (
-    3, 102, 1, '2024-09-02', '2025-01-15', 'CHECKED_OUT' -- SV 3 đã trả phòng (CHECKED_OUT)
+    3, 16, 1, '2024-09-02', '2025-01-15', 'CHECKED_OUT' -- SV 3 đã trả phòng (CHECKED_OUT)
 ),
 (
-    4, 205, 1, '2024-09-02', '2024-09-10', 'CANCELLED'  -- SV 4 đã hủy đăng ký (CANCELLED)
+    4, 33, 1, '2024-09-02', '2024-09-10', 'CANCELLED'  -- SV 4 đã hủy đăng ký (CANCELLED)
 ),
 (
-    5, 205, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 5 ở phòng 205, đang hoạt động
+    5, 33, 1, '2024-09-02', '2025-01-15', 'ACTIVE'     -- SV 5 ở phòng 205, đang hoạt động
 );
 
 -- Bảng Đăng ký ở (Bao gồm thường và ưu tiên)
@@ -218,32 +218,89 @@ CREATE TABLE registrations (
     FOREIGN KEY (semester_id) REFERENCES semesters(id)
     -- Lưu ý: Khóa ngoại invoice_id sẽ được thêm sau khi tạo bảng invoices
 );
+ALTER TABLE registrations
+MODIFY status ENUM(
+    'PENDING',
+    'RETURN',
+    'AWAITING_PAYMENT',
+    'APPROVED',
+    'COMPLETED',
+    'REJECTED',
+    'CANCELLED'
+) DEFAULT 'PENDING';
 
 -- Bảng Hóa đơn (Invoices)
 CREATE TABLE invoices (
     id INT AUTO_INCREMENT PRIMARY KEY,
     invoice_code VARCHAR(20) UNIQUE NOT NULL,
-    type ENUM('ROOM_FEE', 'UTILITY_FEE') NOT NULL,
+    
+    -- Thêm loại OTHER cho các khoản phạt, đền bù
+    type ENUM('ROOM_FEE', 'UTILITY_FEE', 'OTHER') NOT NULL, 
     
     semester_id INT NOT NULL,
-    time_invoiced DATETIME, -- Hóa đơn thu vào thời gian nào
-    room_id INT NOT NULL, -- Hóa đơn luôn gắn với phòng
-    student_id INT, -- Nếu là Tiền phòng -> Gắn với sinh viên cụ thể. Nếu Điện nước -> NULL (hoặc người đại diện)
+    time_invoiced DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    room_id INT NOT NULL, 
+    
+    -- QUAN TRỌNG: 
+    -- Nếu type = ROOM_FEE: student_id bắt buộc (hóa đơn cá nhân)
+    -- Nếu type = UTILITY_FEE: student_id là NULL (hóa đơn tập thể)
+    student_id INT NULL, 
+    
+    -- LIÊN KẾT MỚI:
+    -- Nếu type = UTILITY_FEE: usage_id trỏ sang bảng monthly_usages
+    -- Giúp sinh viên click vào hóa đơn xem được chi tiết số điện/nước
+    usage_id INT NULL,
     
     amount DECIMAL(10, 2) NOT NULL,
-    description VARCHAR(255) COMMENT 'Vd: Tiền điện tháng 10',
+    description VARCHAR(255),
     
     status ENUM('UNPAID', 'PAID', 'CANCELLED') DEFAULT 'UNPAID',
     due_date DATE,
+    
     paid_at DATETIME,
-    paid_by_student_id INT COMMENT 'Người thực hiện thanh toán (quan trọng cho hóa đơn điện nước)',
+    paid_by_student_id INT NULL COMMENT 'Người đại diện thanh toán (quan trọng với hóa đơn điện nước)',
+    
+    -- THÊM MỚI: Để biết họ trả tiền mặt hay chuyển khoản
+    payment_method ENUM('CASH', 'BANK_TRANSFER', 'QR_CODE') NULL,
+    payment_proof VARCHAR(255) NULL COMMENT 'Lưu ảnh bill chuyển khoản hoặc mã giao dịch',
+    
     created_by_manager_id INT,
     
-    FOREIGN KEY (semester_id) REFERENCES semesters(id),
+    FOREIGN KEY (semester_id) REFERENCES semesters(id), -- Hoặc bảng period_stay tùy thiết kế
     FOREIGN KEY (room_id) REFERENCES rooms(id),
     FOREIGN KEY (student_id) REFERENCES students(id),
     FOREIGN KEY (paid_by_student_id) REFERENCES students(id),
-    FOREIGN KEY (created_by_manager_id) REFERENCES managers(id)
+    FOREIGN KEY (created_by_manager_id) REFERENCES managers(id),
+    FOREIGN KEY (usage_id) REFERENCES monthly_usages(id) -- Khóa ngoại mới
+);
+CREATE TABLE monthly_usages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    room_id INT NOT NULL,
+    month INT NOT NULL,
+    year INT NOT NULL,
+    
+    -- Chỉ số điện
+    electricity_old_index INT NOT NULL,
+    electricity_new_index INT NOT NULL,
+    electricity_price DECIMAL(10, 2) NOT NULL, -- Lưu giá tại thời điểm chốt
+    
+    -- Chỉ số nước
+    water_old_index INT NOT NULL,
+    water_new_index INT NOT NULL,
+    water_price DECIMAL(10, 2) NOT NULL, -- Lưu giá tại thời điểm chốt
+    
+    total_amount DECIMAL(10, 2) NOT NULL, -- Tổng tiền = (Điện * giá) + (Nước * giá)
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (room_id) REFERENCES rooms(id)
+);
+CREATE TABLE `service_prices` (
+  `id` int AUTO_INCREMENT PRIMARY KEY,
+  `service_name` varchar(50) NOT NULL, -- Ví dụ: 'ELECTRICITY', 'WATER'
+  `unit_price` decimal(10,2) NOT NULL, -- Giá 1 số (VD: 3500.00)
+  `apply_date` date NOT NULL,          -- Ngày bắt đầu áp dụng giá này
+  `is_active` boolean DEFAULT 1        -- Đang áp dụng hay không
 );
 
 -- Bảng Yêu cầu hỗ trợ (Support Requests)

@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    maxWidth: "75%",
+    maxWidth: "70%",
   },
   avatarContainer: {
     width: 40,

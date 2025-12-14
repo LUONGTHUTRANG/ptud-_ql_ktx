@@ -2,7 +2,13 @@ import Invoice from "../models/invoiceModel.js";
 
 export const getAllInvoices = async (req, res) => {
   try {
-    const invoices = await Invoice.getAll();
+    const { student_id } = req.query;
+    let invoices;
+    if (student_id) {
+      invoices = await Invoice.getByStudentId(student_id);
+    } else {
+      invoices = await Invoice.getAll();
+    }
     res.json(invoices);
   } catch (err) {
     res.status(500).json({ error: err.message });

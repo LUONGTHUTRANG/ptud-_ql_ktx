@@ -3,7 +3,8 @@ export type RootStackParamList = {
   Home: undefined;
   Services: undefined;
   Bills: undefined;
-  PaymentDetail: undefined;
+  BillDetail: { bill: any };
+  PaymentDetail: { bill: any };
   TransactionHistory: undefined;
   BuildingList: undefined;
   RoomList: { id: string; name: string };

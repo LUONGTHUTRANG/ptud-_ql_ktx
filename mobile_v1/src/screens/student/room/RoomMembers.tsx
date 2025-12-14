@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,15 @@ import {
   TextInput,
   FlatList,
   Image,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { studentApi } from "../../../services/studentApi";
+import { getRoomById } from "../../../services/roomApi";
+import { getMe } from "../../../services/authApi";
 
 type RoomMembersScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -26,35 +31,61 @@ interface Student {
   id: string;
   name: string;
   studentId: string;
+  className: string;
   avatarUrl: string;
 }
 
 const RoomMembers = ({ navigation }: Props) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [roomName, setRoomName] = useState("");
 
-  const students: Student[] = [
-    {
-      id: "1",
-      name: "Nguyễn Văn An",
-      studentId: "B20DCCN001",
-      avatarUrl:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuAmF6yoO_jA0dwmwkHM8e7OF8YIMV2x3E6gMNy9aWFzvRquOw_vLuA1_tNTSGVmRq-TQUAiUp4WI83ZDkvh3REL8OfLU7B3LigDheZQ6VHWA1gyAhOFZrCN9v6fVYL0tAXOB9HskR0t3Lwefogy3qmmcV8R6pvaYRmCV5y9Wuy2Qea-wrhDpjtjELRwZrcz1a3BOvCDhu4N1qGjOP-2rdpfXTDEM24P9To6hlK79v5SUI4yM73LVYPQiKZchq6GVUzyf8ngS4MSpMo",
-    },
-    {
-      id: "2",
-      name: "Trần Thị Bình",
-      studentId: "B20DCCN002",
-      avatarUrl:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuARjhHw_xEuY8e6b3JSG1HvwfFIOQzCHgCFd0Iv5ntrieyHYWeIg-7FervAaAUvXs3vVsrM2BKosecBTQAX6Q5LTa-nK2doGAee8U2Pu8-sjuu9rgtFBrkGSD-dypNweuthIsTgsEWX7b2ZmleWhVoLcRKlEexqt2nW1CntFhCVTlbG9oCKg1b8J5d5siIScGztdL65iH5fa6YtMOt3WVjd2t_bzrD6MMw5ybdt4jXXvJ4_FqrO41nQiWx3a9f7T5BgyEbo_58Qq8Y",
-    },
-    {
-      id: "3",
-      name: "Lê Văn Cường",
-      studentId: "B20DCCN003",
-      avatarUrl:
-        "https://lh3.googleusercontent.com/aida-public/AB6AXuAE1aGL6D4-3n2RaWRESi2ld-74vmGTUXXP4RQJGd39U59kq79ObBdRBVeU97qpDtMfqdPyK_8MCNEO2p-21-tG9O6xO7rmhFTuf2BM758a_Vxpkv6IozpTGVXWOpC3itier2jYOlQAOFLy8fXK5ALoHJh7r87XBPyvxnG35G9prVW7u7j7sFu9hJiYxD1byHaLbQqZI5ykdcqIcC3N_n9W4_efYrr3shq_v5X5Rhq91VTMRFt4ETm2JCsqxVHJzvw6NAm0EzPPNFw",
-    },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const user = await getMe();
+
+      if (user && user.current_room_id) {
+        const [studentsData, roomData] = await Promise.all([
+          studentApi.getStudentsByRoom(user.current_room_id),
+          getRoomById(user.current_room_id),
+        ]);
+
+        const mappedStudents = studentsData.map((s: any) => ({
+          id: s.id.toString(),
+          name: s.full_name,
+          studentId: s.mssv,
+          className: s.class_name,
+          avatarUrl:
+            "https://ui-avatars.com/api/?name=" +
+            encodeURIComponent(s.full_name) +
+            "&background=random",
+        }));
+
+        setStudents(mappedStudents);
+
+        if (studentsData.length > 0) {
+          setRoomName(
+            `Phòng ${studentsData[0].room_number} - Tòa ${studentsData[0].building_name}`
+          );
+        } else {
+          setRoomName(`Phòng ${roomData.room_number}`);
+        }
+      } else {
+        Alert.alert("Thông báo", "Bạn chưa được xếp vào phòng nào.");
+      }
+    } catch (error) {
+      console.error("Error fetching room members:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách thành viên.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredStudents = students.filter(
     (student) =>
@@ -68,11 +99,21 @@ const RoomMembers = ({ navigation }: Props) => {
         <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
         <View style={styles.textContainer}>
           <Text style={styles.studentName}>{item.name}</Text>
-          <Text style={styles.studentId}>{item.studentId}</Text>
+          <Text style={styles.studentId}>
+            {item.studentId} - {item.className}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
   );
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -86,7 +127,9 @@ const RoomMembers = ({ navigation }: Props) => {
         >
           <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Phòng 101 - Tòa A</Text>
+        <Text style={styles.headerTitle}>
+          {roomName || "Danh sách thành viên"}
+        </Text>
         <View style={styles.headerRight} />
       </View>
 
@@ -124,6 +167,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   header: {
     flexDirection: "row",

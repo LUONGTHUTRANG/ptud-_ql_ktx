@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,10 +6,15 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { fetchInvoices } from "../../../services/invoiceApi";
+import { getMe } from "../../../services/authApi";
+import moment from "moment";
 
 type BillsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -22,13 +27,14 @@ interface Props {
 
 interface BillItem {
   id: string;
-  type: "electricity" | "room" | "water";
+  type: "electricity" | "room" | "water" | "other";
   title: string;
   amount: number;
   amountDisplay: string;
   dueDate: string;
   status: "overdue" | "pending" | "paid";
   icon: string;
+  originalData: any;
 }
 
 const Bills = ({ navigation }: Props) => {
@@ -36,75 +42,132 @@ const Bills = ({ navigation }: Props) => {
     "unpaid"
   );
   const [selectedBills, setSelectedBills] = useState<string[]>([]);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [bills, setBills] = useState<BillItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock Data
-  const allBills: BillItem[] = [
-    {
-      id: "1",
-      type: "electricity",
-      title: "Tiền điện tháng 10/2023",
-      amount: 500000,
-      amountDisplay: "500.000 VND",
-      dueDate: "25/10/2023",
-      status: "overdue",
-      icon: "electric-bolt", // electric_bolt -> electric-bolt
-    },
-    {
-      id: "2",
-      type: "room",
-      title: "Tiền phòng tháng 11/2023",
-      amount: 2500000,
-      amountDisplay: "2.500.000 VND",
-      dueDate: "30/11/2023",
-      status: "pending",
-      icon: "night-shelter", // night_shelter -> night-shelter
-    },
-    {
-      id: "3",
-      type: "water",
-      title: "Tiền nước tháng 10/2023",
-      amount: 500000,
-      amountDisplay: "500.000 VND",
-      dueDate: "25/11/2023",
-      status: "pending",
-      icon: "water-drop", // water_drop -> water-drop
-    },
-  ];
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const user = await getMe();
+      const data = await fetchInvoices(user.id);
+
+      const mappedBills = data.map((item: any) => {
+        const isOverdue =
+          item.status === "UNPAID" &&
+          moment(item.due_date).isBefore(moment(), "day");
+
+        let status: "overdue" | "pending" | "paid" = "pending";
+        if (item.status === "PAID") status = "paid";
+        else if (isOverdue) status = "overdue";
+
+        let icon = "receipt";
+        let type: any = "other";
+
+        if (item.type === "ROOM_FEE") {
+          icon = "night-shelter";
+          type = "room";
+        } else if (item.type === "UTILITY_FEE") {
+          icon = "electric-bolt"; // Default to electric icon for utility
+          type = "electricity";
+        }
+
+        return {
+          id: item.id.toString(),
+          type,
+          title: item.description || `Hóa đơn ${item.invoice_code}`,
+          amount: item.amount,
+          amountDisplay: new Intl.NumberFormat("vi-VN", {
+            style: "currency",
+            currency: "VND",
+          }).format(item.amount),
+          dueDate: moment(item.due_date).format("DD/MM/YYYY"),
+          status,
+          icon,
+          originalData: item,
+        };
+      });
+
+      setBills(mappedBills);
+    } catch (error) {
+      console.error("Failed to load bills:", error);
+      Alert.alert("Lỗi", "Không thể tải danh sách hóa đơn");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter bills based on active tab
   const filteredBills = useMemo(() => {
     if (activeTab === "overdue")
-      return allBills.filter((b) => b.status === "overdue");
-    if (activeTab === "paid")
-      return allBills.filter((b) => b.status === "paid");
-    return allBills.filter((b) => b.status !== "paid");
-  }, [activeTab]);
+      return bills.filter((b) => b.status === "overdue");
+    if (activeTab === "paid") return bills.filter((b) => b.status === "paid");
+    return bills.filter((b) => b.status !== "paid" && b.status !== "overdue");
+  }, [activeTab, bills]);
+
+  const handleLongPress = (id: string) => {
+    if (activeTab === "paid") return; // Cannot select paid bills
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedBills([id]);
+    }
+  };
+
+  const handlePress = (id: string) => {
+    if (isSelectionMode) {
+      toggleBillSelection(id);
+    } else {
+      const bill = bills.find((b) => b.id === id);
+      if (bill) {
+        navigation.navigate("BillDetail", { bill: bill.originalData });
+      }
+    }
+  };
 
   const toggleBillSelection = (id: string) => {
+    let newSelectedBills;
     if (selectedBills.includes(id)) {
-      setSelectedBills(selectedBills.filter((billId) => billId !== id));
+      newSelectedBills = selectedBills.filter((billId) => billId !== id);
     } else {
-      setSelectedBills([...selectedBills, id]);
+      newSelectedBills = [...selectedBills, id];
+    }
+
+    setSelectedBills(newSelectedBills);
+
+    if (newSelectedBills.length === 0) {
+      setIsSelectionMode(false);
     }
   };
 
   const toggleSelectAll = () => {
     if (selectedBills.length === filteredBills.length) {
       setSelectedBills([]);
+      setIsSelectionMode(false);
     } else {
       setSelectedBills(filteredBills.map((b) => b.id));
     }
   };
 
+  const cancelSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedBills([]);
+  };
+
   const totalAmount = useMemo(() => {
-    return allBills
+    return bills
       .filter((bill) => selectedBills.includes(bill.id))
       .reduce((sum, bill) => sum + bill.amount, 0);
-  }, [selectedBills, allBills]);
+  }, [selectedBills, bills]);
 
   const formatCurrency = (amount: number) => {
-    // Simple formatter for React Native if Intl is not fully supported or behaves differently
-    return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " VND";
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+    }).format(amount);
   };
 
   const getStatusBadge = (status: string) => {
@@ -122,26 +185,70 @@ const Bills = ({ navigation }: Props) => {
     );
   };
 
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { justifyContent: "center", alignItems: "center" },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hóa đơn & Thanh toán</Text>
-        <View style={styles.headerRight} />
+        {isSelectionMode ? (
+          <TouchableOpacity
+            onPress={cancelSelectionMode}
+            style={styles.backButton}
+          >
+            <MaterialIcons name="close" size={24} color="#1e293b" />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.headerTitle}>
+          {isSelectionMode
+            ? `Đã chọn ${selectedBills.length}`
+            : "Hóa đơn & Thanh toán"}
+        </Text>
+
+        {isSelectionMode ? (
+          <TouchableOpacity
+            onPress={toggleSelectAll}
+            style={styles.headerRightButton}
+          >
+            <Text style={styles.headerRightText}>
+              {selectedBills.length === filteredBills.length
+                ? "Bỏ chọn"
+                : "Tất cả"}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerRight} />
+        )}
       </View>
 
       {/* Tabs */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
-          onPress={() => setActiveTab("unpaid")}
+          onPress={() => {
+            setActiveTab("unpaid");
+            cancelSelectionMode();
+          }}
           style={[styles.tab, activeTab === "unpaid" && styles.activeTab]}
         >
           <Text
@@ -154,7 +261,10 @@ const Bills = ({ navigation }: Props) => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setActiveTab("paid")}
+          onPress={() => {
+            setActiveTab("paid");
+            cancelSelectionMode();
+          }}
           style={[styles.tab, activeTab === "paid" && styles.activeTab]}
         >
           <Text
@@ -167,7 +277,10 @@ const Bills = ({ navigation }: Props) => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => setActiveTab("overdue")}
+          onPress={() => {
+            setActiveTab("overdue");
+            cancelSelectionMode();
+          }}
           style={[styles.tab, activeTab === "overdue" && styles.activeTab]}
         >
           <Text
@@ -183,25 +296,15 @@ const Bills = ({ navigation }: Props) => {
 
       {/* List */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Select All Row */}
-        {activeTab !== "paid" && filteredBills.length > 0 && (
-          <View style={styles.selectAllContainer}>
-            <TouchableOpacity onPress={toggleSelectAll}>
-              <Text style={styles.selectAllText}>
-                {selectedBills.length === filteredBills.length
-                  ? "Bỏ chọn tất cả"
-                  : "Chọn tất cả"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {filteredBills.map((bill) => {
           const isSelected = selectedBills.includes(bill.id);
           return (
             <TouchableOpacity
               key={bill.id}
-              onPress={() => toggleBillSelection(bill.id)}
+              onLongPress={() => handleLongPress(bill.id)}
+              onPress={() => handlePress(bill.id)}
+              delayLongPress={300}
+              activeOpacity={0.7}
               style={[styles.billCard, isSelected && styles.billCardSelected]}
             >
               {/* Icon & Selection Circle */}
@@ -213,13 +316,18 @@ const Bills = ({ navigation }: Props) => {
                     color="#0ea5e9"
                   />
                 </View>
-                {/* Checkbox Logic */}
-                {isSelected ? (
-                  <View style={styles.checkboxSelected}>
-                    <MaterialIcons name="check" size={16} color="#ffffff" />
+
+                {/* Checkbox Logic - Only show in selection mode */}
+                {isSelectionMode && (
+                  <View style={styles.checkboxContainer}>
+                    {isSelected ? (
+                      <View style={styles.checkboxSelected}>
+                        <MaterialIcons name="check" size={16} color="#ffffff" />
+                      </View>
+                    ) : (
+                      <View style={styles.checkboxUnselected} />
+                    )}
                   </View>
-                ) : (
-                  <View style={styles.checkboxUnselected} />
                 )}
               </View>
 
@@ -256,7 +364,7 @@ const Bills = ({ navigation }: Props) => {
       </ScrollView>
 
       {/* Bottom Action Bar */}
-      {selectedBills.length > 0 && (
+      {isSelectionMode && selectedBills.length > 0 && (
         <View style={styles.bottomBar}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>
@@ -267,7 +375,27 @@ const Bills = ({ navigation }: Props) => {
             </Text>
           </View>
           <TouchableOpacity
-            onPress={() => navigation.navigate("PaymentDetail")}
+            onPress={() => {
+              const selectedBillObjects = bills.filter((b) =>
+                selectedBills.includes(b.id)
+              );
+              const total = selectedBillObjects.reduce(
+                (sum, b) => sum + b.amount,
+                0
+              );
+              const firstBill = selectedBillObjects[0]?.originalData || {};
+
+              const combinedBill = {
+                ...firstBill,
+                amount: total,
+                description: `Thanh toán ${selectedBills.length} hóa đơn`,
+                invoice_code: selectedBillObjects
+                  .map((b) => b.originalData.invoice_code)
+                  .join(", "),
+              };
+
+              navigation.navigate("PaymentDetail", { bill: combinedBill });
+            }}
             style={styles.payButton}
           >
             <Text style={styles.payButtonText}>Thanh toán</Text>
@@ -304,6 +432,14 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+  },
+  headerRightButton: {
+    padding: 8,
+  },
+  headerRightText: {
+    color: "#0ea5e9",
+    fontWeight: "600",
+    fontSize: 14,
   },
   tabContainer: {
     flexDirection: "row",
@@ -373,6 +509,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#dbeafe", // bg-blue-100
     alignItems: "center",
     justifyContent: "center",
+  },
+  checkboxContainer: {
+    position: "absolute",
+    bottom: -6,
+    right: -6,
+    backgroundColor: "#fff",
+    borderRadius: 12,
   },
   checkboxSelected: {
     width: 24,

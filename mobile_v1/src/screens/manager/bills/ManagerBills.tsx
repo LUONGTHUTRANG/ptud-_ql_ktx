@@ -4,7 +4,8 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  FlatList,
+  ScrollView,
+  TextInput,
   StatusBar,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -20,239 +21,394 @@ interface Props {
   navigation: ManagerBillsScreenNavigationProp;
 }
 
-interface BillItem {
-  id: string;
-  code: string;
-  status: "paid" | "unpaid" | "overdue";
-  payerName: string;
-  room: string;
-  amount: string;
-  createdDate: string;
-  dueDate: string;
-}
-
 const ManagerBills = ({ navigation }: Props) => {
-  const [filter, setFilter] = useState<"all" | "paid" | "unpaid" | "overdue">(
+  const [activeTab, setActiveTab] = useState<"room" | "utility">("room");
+  const [filterStatus, setFilterStatus] = useState<"all" | "unpaid" | "paid">(
     "all"
   );
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const bills: BillItem[] = [
+  // Mock data based on HTML content
+  const bills = [
     {
       id: "1",
-      code: "#HD001",
-      status: "paid",
-      payerName: "Nguyễn Văn A",
-      room: "101 - A1",
-      amount: "500.000 VND",
-      createdDate: "01/10/2023",
-      dueDate: "15/10/2023",
+      room: "Phòng 205",
+      period: "Tháng 10/2023",
+      amount: "1,500,000 đ",
+      status: "unpaid",
+      type: "room",
     },
     {
       id: "2",
-      code: "#HD002",
-      status: "unpaid",
-      payerName: "Trần Thị B",
-      room: "102 - A1",
-      amount: "2.500.000 VND",
-      createdDate: "01/11/2023",
-      dueDate: "15/11/2023",
+      room: "Phòng 102",
+      period: "Tháng 10/2023",
+      amount: "1,200,000 đ",
+      status: "paid",
+      type: "room",
     },
     {
       id: "3",
-      code: "#HD003",
+      room: "Phòng 301",
+      period: "Tháng 09/2023",
+      amount: "1,500,000 đ",
       status: "overdue",
-      payerName: "Lê Văn C",
-      room: "201 - B1",
-      amount: "300.000 VND",
-      createdDate: "01/09/2023",
-      dueDate: "15/09/2023",
-    },
-    {
-      id: "4",
-      code: "#HD004",
-      status: "unpaid",
-      payerName: "Phạm Thị D",
-      room: "305 - G6",
-      amount: "1.200.000 VND",
-      createdDate: "05/11/2023",
-      dueDate: "20/11/2023",
-    },
-    {
-      id: "5",
-      code: "#HD005",
-      status: "paid",
-      payerName: "Hoàng Văn E",
-      room: "101 - A2",
-      amount: "500.000 VND",
-      createdDate: "01/10/2023",
-      dueDate: "15/10/2023",
+      type: "room",
     },
   ];
 
-  const filteredBills = bills.filter((bill) => {
-    if (filter === "all") return true;
-    return bill.status === filter;
-  });
+  const utilityBills = [
+    {
+      id: "1",
+      month: "Tháng 10/2023",
+      count: "52 hóa đơn",
+      collected: "12,500,000 đ",
+      pending: "5,200,000 đ",
+      closedDate: "15/10/2023",
+      status: "active",
+      total: null,
+    },
+    {
+      id: "2",
+      month: "Tháng 09/2023",
+      count: "50 hóa đơn",
+      collected: null,
+      pending: null,
+      closedDate: null,
+      status: "completed",
+      total: "18,200,000 đ",
+    },
+    {
+      id: "3",
+      month: "Tháng 08/2023",
+      count: "50 hóa đơn",
+      collected: null,
+      pending: null,
+      closedDate: null,
+      status: "completed",
+      total: "17,850,000 đ",
+    },
+  ];
 
-  const getStatusStyle = (status: BillItem["status"]) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "paid":
         return { bg: "#dcfce7", text: "#16a34a", label: "Đã thanh toán" };
       case "unpaid":
-        return { bg: "#ffedd5", text: "#ea580c", label: "Chưa thanh toán" };
+        return { bg: "#fee2e2", text: "#dc2626", label: "Chưa thanh toán" };
       case "overdue":
-        return { bg: "#fee2e2", text: "#dc2626", label: "Đã quá hạn" };
+        return { bg: "#fee2e2", text: "#dc2626", label: "Quá hạn" };
+      default:
+        return { bg: "#f1f5f9", text: "#64748b", label: "Khác" };
     }
-  };
-
-  const renderItem = ({ item }: { item: BillItem }) => {
-    const style = getStatusStyle(item.status);
-    return (
-      <TouchableOpacity style={styles.itemContainer}>
-        <View style={styles.itemHeader}>
-          <Text style={styles.itemCode}>{item.code}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: style.bg }]}>
-            <Text style={[styles.statusText, { color: style.text }]}>
-              {style.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.itemBody}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Người đóng:</Text>
-            <Text style={styles.infoValue}>{item.payerName}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Phòng:</Text>
-            <Text style={styles.infoValue}>{item.room}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Số tiền:</Text>
-            <Text style={styles.amountValue}>{item.amount}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Ngày tạo:</Text>
-            <Text style={styles.infoValue}>{item.createdDate}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Hết hạn:</Text>
-            <Text
-              style={[
-                styles.infoValue,
-                item.status === "overdue" && {
-                  color: "#dc2626",
-                  fontWeight: "bold",
-                },
-              ]}
-            >
-              {item.dueDate}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#1e293b" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Quản lý hóa đơn</Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerTop}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.iconButton}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Quản lý Hóa đơn</Text>
+          <TouchableOpacity style={styles.iconButton}>
+            <MaterialIcons name="add" size={24} color="#136dec" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === "room" && styles.activeTab]}
+            onPress={() => setActiveTab("room")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "room"
+                  ? styles.activeTabText
+                  : styles.inactiveTabText,
+              ]}
+            >
+              Hóa đơn tiền phòng
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.tabItem,
+              activeTab === "utility" && styles.activeTab,
+            ]}
+            onPress={() => setActiveTab("utility")}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === "utility"
+                  ? styles.activeTabText
+                  : styles.inactiveTabText,
+              ]}
+            >
+              Hóa đơn điện nước
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === "all" && styles.activeFilterTab]}
-          onPress={() => setFilter("all")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "all" && styles.activeFilterText,
-            ]}
-          >
-            Tất cả
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === "paid" && styles.activeFilterTab,
-          ]}
-          onPress={() => setFilter("paid")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "paid" && styles.activeFilterText,
-            ]}
-          >
-            Đã thanh toán
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === "unpaid" && styles.activeFilterTab,
-          ]}
-          onPress={() => setFilter("unpaid")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "unpaid" && styles.activeFilterText,
-            ]}
-          >
-            Chưa thanh toán
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === "overdue" && styles.activeFilterTab,
-          ]}
-          onPress={() => setFilter("overdue")}
-        >
-          <Text
-            style={[
-              styles.filterText,
-              filter === "overdue" && styles.activeFilterText,
-            ]}
-          >
-            Đã quá hạn
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* List */}
-      <FlatList
-        data={filteredBills}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-      />
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          // Handle add new bill
-        }}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: 100 }}
       >
-        <MaterialIcons name="add" size={32} color="#ffffff" />
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBox}>
+            <MaterialIcons name="search" size={24} color="#94a3b8" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Tìm kiếm hóa đơn..."
+              placeholderTextColor="#94a3b8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            <TouchableOpacity>
+              <MaterialIcons name="tune" size={20} color="#94a3b8" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Filter Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContainer}
+        >
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              filterStatus === "all"
+                ? styles.activeFilterChip
+                : styles.inactiveFilterChip,
+            ]}
+            onPress={() => setFilterStatus("all")}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterStatus === "all"
+                  ? styles.activeFilterText
+                  : styles.inactiveFilterText,
+              ]}
+            >
+              Tất cả
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              filterStatus === "unpaid"
+                ? styles.activeFilterChip
+                : styles.inactiveFilterChip,
+            ]}
+            onPress={() => setFilterStatus("unpaid")}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterStatus === "unpaid"
+                  ? styles.activeFilterText
+                  : styles.inactiveFilterText,
+              ]}
+            >
+              Chưa thanh toán
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterChip,
+              filterStatus === "paid"
+                ? styles.activeFilterChip
+                : styles.inactiveFilterChip,
+            ]}
+            onPress={() => setFilterStatus("paid")}
+          >
+            <Text
+              style={[
+                styles.filterText,
+                filterStatus === "paid"
+                  ? styles.activeFilterText
+                  : styles.inactiveFilterText,
+              ]}
+            >
+              Đã thanh toán
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* Bill List */}
+        <View style={styles.listContainer}>
+          {activeTab === "room"
+            ? bills.map((bill) => {
+                const statusStyle = getStatusColor(bill.status);
+                return (
+                  <View key={bill.id} style={styles.billCard}>
+                    <View style={styles.cardHeader}>
+                      <View style={styles.cardInfo}>
+                        <View style={styles.iconContainer}>
+                          <MaterialIcons
+                            name="receipt-long"
+                            size={24}
+                            color="#4f46e5"
+                          />
+                        </View>
+                        <View>
+                          <Text style={styles.roomName}>{bill.room}</Text>
+                          <Text style={styles.periodText}>{bill.period}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.amountInfo}>
+                        <View
+                          style={[
+                            styles.statusBadge,
+                            { backgroundColor: statusStyle.bg },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.statusText,
+                              { color: statusStyle.text },
+                            ]}
+                          >
+                            {statusStyle.label}
+                          </Text>
+                        </View>
+                        <Text style={styles.amountText}>{bill.amount}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.cardFooter}>
+                      <View style={{ flex: 1 }} />
+
+                      <TouchableOpacity style={styles.detailButton}>
+                        <Text style={styles.detailButtonText}>
+                          Xem chi tiết
+                        </Text>
+                        <MaterialIcons
+                          name="arrow-forward"
+                          size={16}
+                          color="#136dec"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            : utilityBills.map((bill) => (
+                <TouchableOpacity
+                  key={bill.id}
+                  style={[
+                    styles.utilityCard,
+                    bill.status === "completed" && styles.utilityCardCompleted,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.leftBorder,
+                      {
+                        backgroundColor:
+                          bill.status === "active" ? "#3b82f6" : "#cbd5e1",
+                      },
+                    ]}
+                  />
+                  <View style={styles.utilityContent}>
+                    <View style={styles.utilityHeader}>
+                      <View style={styles.utilityInfo}>
+                        <View
+                          style={[
+                            styles.utilityIcon,
+                            {
+                              backgroundColor:
+                                bill.status === "active"
+                                  ? "#eff6ff"
+                                  : "#f1f5f9",
+                            },
+                          ]}
+                        >
+                          <MaterialIcons
+                            name={
+                              bill.status === "active"
+                                ? "calendar-today"
+                                : "event"
+                            }
+                            size={24}
+                            color={
+                              bill.status === "active" ? "#2563eb" : "#475569"
+                            }
+                          />
+                        </View>
+                        <View>
+                          <Text style={styles.utilityMonth}>{bill.month}</Text>
+                          <Text style={styles.utilityCount}>{bill.count}</Text>
+                        </View>
+                      </View>
+                      <MaterialIcons
+                        name="chevron-right"
+                        size={24}
+                        color="#94a3b8"
+                      />
+                    </View>
+
+                    {bill.status === "active" ? (
+                      <>
+                        <View style={styles.statsContainer}>
+                          <View style={styles.statBox}>
+                            <Text style={styles.statLabel}>ĐÃ THU</Text>
+                            <Text style={styles.statValueSuccess}>
+                              {bill.collected}
+                            </Text>
+                          </View>
+                          <View style={styles.statBox}>
+                            <Text style={styles.statLabel}>CHỜ THU</Text>
+                            <Text style={styles.statValueWarning}>
+                              {bill.pending}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.closedDateContainer}>
+                          <View style={styles.dot} />
+                          <Text style={styles.closedDateText}>
+                            Đã chốt sổ: {bill.closedDate}
+                          </Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.completedRow}>
+                        <View style={styles.completedStatus}>
+                          <MaterialIcons
+                            name="check-circle"
+                            size={16}
+                            color="#16a34a"
+                          />
+                          <Text style={styles.completedText}>
+                            Hoàn thành 100%
+                          </Text>
+                        </View>
+                        <Text style={styles.totalAmount}>{bill.total}</Text>
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+        </View>
+      </ScrollView>
+
+      {/* Floating Action Button */}
+      <TouchableOpacity style={styles.fab}>
+        <MaterialIcons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
     </View>
   );
@@ -264,16 +420,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    height: 56,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(248, 250, 252, 0.8)",
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
   },
-  backButton: {
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    height: 64,
+  },
+  iconButton: {
     width: 40,
     height: 40,
     alignItems: "center",
@@ -284,102 +442,165 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#0f172a",
-    textAlign: "center",
+  },
+  tabs: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  activeTab: {
+    borderBottomColor: "#136dec",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  activeTabText: {
+    color: "#136dec",
+  },
+  inactiveTabText: {
+    color: "#64748b",
+  },
+  content: {
     flex: 1,
   },
-  headerRight: {
-    width: 40,
-  },
-  filterContainer: {
-    flexDirection: "row",
+  searchContainer: {
     padding: 16,
-    gap: 8,
-    flexWrap: "wrap",
+    paddingBottom: 0,
   },
-  filterTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#f1f5f9",
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
-  activeFilterTab: {
-    backgroundColor: "#0ea5e9",
-    borderColor: "#0ea5e9",
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  filterContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  activeFilterChip: {
+    backgroundColor: "#0f172a",
+    borderColor: "#0f172a",
+  },
+  inactiveFilterChip: {
+    backgroundColor: "#ffffff",
+    borderColor: "#e2e8f0",
   },
   filterText: {
     fontSize: 14,
-    color: "#64748b",
-    fontWeight: "500",
+    fontWeight: "600",
   },
   activeFilterText: {
     color: "#ffffff",
   },
-  listContent: {
-    padding: 16,
-    paddingTop: 0,
-    gap: 12,
-    paddingBottom: 80, // Space for FAB
+  inactiveFilterText: {
+    color: "#334155",
   },
-  itemContainer: {
+  listContainer: {
+    padding: 16,
+    gap: 12,
+  },
+  billCard: {
     backgroundColor: "#ffffff",
     borderRadius: 12,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: "#f1f5f9",
   },
-  itemHeader: {
+  cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
+    alignItems: "flex-start",
   },
-  itemCode: {
+  cardInfo: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: "#e0e7ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  roomName: {
     fontSize: 16,
     fontWeight: "bold",
     color: "#0f172a",
   },
+  periodText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748b",
+    marginTop: 2,
+  },
+  amountInfo: {
+    alignItems: "flex-end",
+  },
   statusBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 999,
+    marginBottom: 4,
   },
   statusText: {
     fontSize: 12,
     fontWeight: "600",
   },
+  amountText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#0f172a",
+  },
   divider: {
     height: 1,
     backgroundColor: "#f1f5f9",
-    marginBottom: 12,
+    marginVertical: 12,
   },
-  itemBody: {
-    gap: 8,
-  },
-  infoRow: {
+  cardFooter: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     alignItems: "center",
   },
-  infoLabel: {
-    fontSize: 14,
-    color: "#64748b",
+  detailButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  infoValue: {
+  detailButtonText: {
     fontSize: 14,
-    color: "#334155",
-    fontWeight: "500",
-  },
-  amountValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#0ea5e9",
+    fontWeight: "600",
+    color: "#136dec",
   },
   fab: {
     position: "absolute",
@@ -388,14 +609,136 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#0ea5e9",
+    backgroundColor: "#136dec",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#0ea5e9",
+    shadowColor: "#136dec",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 6,
+  },
+  utilityCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+    overflow: "hidden",
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  utilityCardCompleted: {
+    opacity: 0.9,
+  },
+  leftBorder: {
+    width: 6,
+    height: "100%",
+  },
+  utilityContent: {
+    flex: 1,
+    padding: 16,
+    paddingLeft: 20,
+  },
+  utilityHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  utilityInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  utilityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  utilityMonth: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#0f172a",
+  },
+  utilityCount: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#64748b",
+    marginTop: 2,
+  },
+  statsContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#f1f5f9",
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#64748b",
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  statValueSuccess: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#16a34a",
+  },
+  statValueWarning: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#d97706",
+  },
+  closedDateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#22c55e",
+  },
+  closedDateText: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  completedRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  completedStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  completedText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#334155",
+  },
+  totalAmount: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#0f172a",
   },
 });
 

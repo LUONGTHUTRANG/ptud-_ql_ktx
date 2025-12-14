@@ -10,7 +10,9 @@ import {
   StatusBar,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { RootStackParamList } from "../../../types";
 import ConfirmModal from "../../../components/ConfirmModal";
 
@@ -19,15 +21,20 @@ type PaymentDetailScreenNavigationProp = StackNavigationProp<
   "PaymentDetail"
 >;
 
+type PaymentDetailRouteProp = RouteProp<RootStackParamList, "PaymentDetail">;
+
 interface Props {
   navigation: PaymentDetailScreenNavigationProp;
 }
 
 const PaymentDetail = ({ navigation }: Props) => {
+  const route = useRoute<PaymentDetailRouteProp>();
+  const { bill } = route.params || {};
   const [activeTab, setActiveTab] = useState<"account" | "qr">("account");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const handleCopy = (text: string) => {
+  const handleCopy = async (text: string) => {
+    await Clipboard.setStringAsync(text);
     Alert.alert("Đã sao chép", `Đã sao chép ${text} vào bộ nhớ tạm`);
   };
 
@@ -39,6 +46,29 @@ const PaymentDetail = ({ navigation }: Props) => {
     setShowSuccessModal(false);
     navigation.navigate("Home");
   };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+    }).format(amount);
+  };
+
+  const amount = formatCurrency(bill?.amount || 0);
+  const period = bill?.usage_month
+    ? `Học kỳ ${bill.semester_name || "1"}, ${bill.usage_year}-${
+        bill.usage_year + 1
+      }` // Approximate logic or just use month/year
+    : bill?.description || `Tháng ${bill?.usage_month}/${bill?.usage_year}`;
+
+  // Better period display
+  const periodDisplay = bill?.usage_month
+    ? `Tháng ${bill.usage_month}/${bill.usage_year}`
+    : bill?.description || "N/A";
+
+  const room = bill?.room_number || "N/A";
+  const building = bill?.building_name || "N/A";
+  const content = `KTX ${room} ${bill?.invoice_code || ""}`;
 
   return (
     <View style={styles.container}>
@@ -60,32 +90,40 @@ const PaymentDetail = ({ navigation }: Props) => {
         {/* Payment Details Card */}
         <View style={styles.card}>
           <View style={styles.amountContainer}>
-            <Text style={styles.amount}>4.000.000 VNĐ</Text>
+            <Text style={styles.amount}>{amount}</Text>
             <Text style={styles.period}>
-              Kỳ hạn thanh toán: Học kỳ 1, 2024-2025
+              Kỳ hạn thanh toán: {periodDisplay}
             </Text>
           </View>
 
           <View style={styles.detailsList}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Phòng</Text>
-              <Text style={styles.detailValue}>Phòng A301</Text>
+              <Text style={styles.detailValue}>{room}</Text>
             </View>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Tòa nhà</Text>
-              <Text style={styles.detailValue}>Ký túc xá khu A</Text>
+              <Text style={styles.detailValue}>{building}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Loại phòng</Text>
-              <Text style={styles.detailValue}>Phòng 4 người, có máy lạnh</Text>
+              <Text style={styles.detailLabel}>Mã hóa đơn</Text>
+              <Text style={styles.detailValue}>
+                {bill?.invoice_code || "N/A"}
+              </Text>
             </View>
           </View>
 
           <View style={styles.noteContainer}>
             <Text style={styles.noteText}>
               Nội dung chuyển khoản:{" "}
-              <Text style={styles.noteBold}>NGUYEN VAN A 123456 TT KTX</Text>
+              <Text style={styles.noteBold}>{content}</Text>
             </Text>
+            <TouchableOpacity
+              style={{ position: "absolute", right: 10, top: 10 }}
+              onPress={() => handleCopy(content)}
+            >
+              <MaterialIcons name="content-copy" size={20} color="#0ea5e9" />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -133,20 +171,18 @@ const PaymentDetail = ({ navigation }: Props) => {
               <View style={styles.accountInfo}>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Ngân hàng</Text>
-                  <Text style={styles.infoValue}>Vietcombank</Text>
+                  <Text style={styles.infoValue}>MB Bank</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Chủ tài khoản</Text>
-                  <Text style={styles.infoValueUppercase}>
-                    Truong Dai Hoc XYZ
-                  </Text>
+                  <Text style={styles.infoValueUppercase}>BAN QUAN LY KTX</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Số tài khoản</Text>
                   <View style={styles.accountNumberContainer}>
-                    <Text style={styles.infoValue}>1234567890</Text>
+                    <Text style={styles.infoValue}>0333 444 555 666</Text>
                     <TouchableOpacity
-                      onPress={() => handleCopy("1234567890")}
+                      onPress={() => handleCopy("0333444555666")}
                       style={styles.copyButton}
                     >
                       <MaterialIcons
@@ -167,9 +203,10 @@ const PaymentDetail = ({ navigation }: Props) => {
                 <View style={styles.qrWrapper}>
                   <Image
                     source={{
-                      uri: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=ExamplePaymentData",
+                      uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuDWpbZXLoNKE9ttlEBnY_howlEBrx9YNjWwTpAzrVIBkeFmIUEXrXswoFy64a5GhTVuxGkmCPGLliPkmmzZuP_Xw77ggRhTZoeAVLFlVzk33RwoUWKv8QAuUPLbz7kH4pSJXGUHYXDEOHIaHS1NbK-p-gYGcdj_FUYLU4mQRhOHCNyT4lKbSkjc1BPVkHkBU0qdVJ4XzdZPnpqGDe7Qt1JVNPqBXBA3Iioi7fvfACAXF8aTXpHMM0EnpC5UG5QTP7iTiWnblb0AZ9I",
                     }}
                     style={styles.qrImage}
+                    resizeMode="contain"
                   />
                 </View>
                 <Text style={styles.qrHelperText}>
