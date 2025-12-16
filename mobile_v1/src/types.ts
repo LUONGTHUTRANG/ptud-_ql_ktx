@@ -33,4 +33,5 @@ export type RootStackParamList = {
   ManagerTerm: undefined;
   ManagerTermDetail: { mode: "create" | "edit"; term?: any };
   RecordMeterReading: { period: string };
+  EnterMeterIndex: { room: any; period: string };
 };

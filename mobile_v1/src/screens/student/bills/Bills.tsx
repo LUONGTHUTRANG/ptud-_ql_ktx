@@ -76,10 +76,16 @@ const Bills = ({ navigation }: Props) => {
           type = "electricity";
         }
 
+        let title = item.description || `Hóa đơn ${item.invoice_code}`;
+        if (item.type === "UTILITY_FEE" && item.room_number) {
+          title = `Điện nước phòng ${item.room_number}`;
+          if (item.description) title += ` - ${item.description}`;
+        }
+
         return {
           id: item.id.toString(),
           type,
-          title: item.description || `Hóa đơn ${item.invoice_code}`,
+          title,
           amount: item.amount,
           amountDisplay: new Intl.NumberFormat("vi-VN", {
             style: "currency",

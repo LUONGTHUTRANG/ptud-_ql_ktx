@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(verifyToken);
 
+router.get("/manager/building", invoiceController.getInvoicesByManager);
 router.get("/", invoiceController.getAllInvoices);
 router.get("/:id", invoiceController.getInvoiceById);
 router.post("/", invoiceController.createInvoice);

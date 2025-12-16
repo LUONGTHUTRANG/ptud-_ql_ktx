@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,16 @@ import {
   ScrollView,
   TextInput,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { MaterialIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import {
+  fetchManagerInvoices,
+  formatInvoiceData,
+  groupUtilityInvoicesByMonth,
+} from "../../../services/invoiceApi";
 
 type ManagerBillsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -27,67 +33,49 @@ const ManagerBills = ({ navigation }: Props) => {
     "all"
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [bills, setBills] = useState<any[]>([]);
+  const [utilityBills, setUtilityBills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data based on HTML content
-  const bills = [
-    {
-      id: "1",
-      room: "Phòng 205",
-      period: "Tháng 10/2023",
-      amount: "1,500,000 đ",
-      status: "unpaid",
-      type: "room",
-    },
-    {
-      id: "2",
-      room: "Phòng 102",
-      period: "Tháng 10/2023",
-      amount: "1,200,000 đ",
-      status: "paid",
-      type: "room",
-    },
-    {
-      id: "3",
-      room: "Phòng 301",
-      period: "Tháng 09/2023",
-      amount: "1,500,000 đ",
-      status: "overdue",
-      type: "room",
-    },
-  ];
+  useEffect(() => {
+    loadBills();
+  }, [activeTab, filterStatus]);
 
-  const utilityBills = [
-    {
-      id: "1",
-      month: "Tháng 10/2023",
-      count: "52 hóa đơn",
-      collected: "12,500,000 đ",
-      pending: "5,200,000 đ",
-      closedDate: "15/10/2023",
-      status: "active",
-      total: null,
-    },
-    {
-      id: "2",
-      month: "Tháng 09/2023",
-      count: "50 hóa đơn",
-      collected: null,
-      pending: null,
-      closedDate: null,
-      status: "completed",
-      total: "18,200,000 đ",
-    },
-    {
-      id: "3",
-      month: "Tháng 08/2023",
-      count: "50 hóa đơn",
-      collected: null,
-      pending: null,
-      closedDate: null,
-      status: "completed",
-      total: "17,850,000 đ",
-    },
-  ];
+  const loadBills = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      if (activeTab === "room") {
+        const data = await fetchManagerInvoices("room", filterStatus);
+        const formattedBills = data.map((invoice: any) => ({
+          id: invoice.id,
+          room: `Phòng ${invoice.room_number}`,
+          period: invoice.time_invoiced
+            ? new Date(invoice.time_invoiced).toLocaleDateString("vi-VN", {
+                year: "numeric",
+                month: "2-digit",
+              })
+            : "N/A",
+          amount: `${parseInt(invoice.amount).toLocaleString("vi-VN")} đ`,
+          status: invoice.status.toLowerCase(),
+          type: "room",
+          invoice,
+        }));
+        setBills(formattedBills);
+      } else {
+        const data = await fetchManagerInvoices("utility", filterStatus);
+        const grouped = groupUtilityInvoicesByMonth(data);
+        setUtilityBills(grouped);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Đã xảy ra lỗi");
+      console.error("Error loading bills:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -242,69 +230,102 @@ const ManagerBills = ({ navigation }: Props) => {
           </TouchableOpacity>
         </ScrollView>
 
+        {/* Loading or Error State */}
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#136dec" />
+            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+          </View>
+        )}
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <MaterialIcons name="error" size={40} color="#dc2626" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadBills}>
+              <Text style={styles.retryButtonText}>Thử lại</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Bill List */}
-        <View style={styles.listContainer}>
-          {activeTab === "room"
-            ? bills.map((bill) => {
-                const statusStyle = getStatusColor(bill.status);
-                return (
-                  <View key={bill.id} style={styles.billCard}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.cardInfo}>
-                        <View style={styles.iconContainer}>
-                          <MaterialIcons
-                            name="receipt-long"
-                            size={24}
-                            color="#4f46e5"
-                          />
+        {!loading && !error && (
+          <View style={styles.listContainer}>
+            {activeTab === "room" ? (
+              bills.length > 0 ? (
+                bills.map((bill) => {
+                  const statusStyle = getStatusColor(bill.status);
+                  return (
+                    <View key={bill.id} style={styles.billCard}>
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardInfo}>
+                          <View style={styles.iconContainer}>
+                            <MaterialIcons
+                              name="receipt-long"
+                              size={24}
+                              color="#4f46e5"
+                            />
+                          </View>
+                          <View>
+                            <Text style={styles.roomName}>{bill.room}</Text>
+                            <Text style={styles.periodText}>{bill.period}</Text>
+                          </View>
                         </View>
-                        <View>
-                          <Text style={styles.roomName}>{bill.room}</Text>
-                          <Text style={styles.periodText}>{bill.period}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.amountInfo}>
-                        <View
-                          style={[
-                            styles.statusBadge,
-                            { backgroundColor: statusStyle.bg },
-                          ]}
-                        >
-                          <Text
+                        <View style={styles.amountInfo}>
+                          <View
                             style={[
-                              styles.statusText,
-                              { color: statusStyle.text },
+                              styles.statusBadge,
+                              { backgroundColor: statusStyle.bg },
                             ]}
                           >
-                            {statusStyle.label}
-                          </Text>
+                            <Text
+                              style={[
+                                styles.statusText,
+                                { color: statusStyle.text },
+                              ]}
+                            >
+                              {statusStyle.label}
+                            </Text>
+                          </View>
+                          <Text style={styles.amountText}>{bill.amount}</Text>
                         </View>
-                        <Text style={styles.amountText}>{bill.amount}</Text>
+                      </View>
+
+                      <View style={styles.divider} />
+
+                      <View style={styles.cardFooter}>
+                        <View style={{ flex: 1 }} />
+
+                        <TouchableOpacity style={styles.detailButton}>
+                          <Text style={styles.detailButtonText}>
+                            Xem chi tiết
+                          </Text>
+                          <MaterialIcons
+                            name="arrow-forward"
+                            size={16}
+                            color="#136dec"
+                          />
+                        </TouchableOpacity>
                       </View>
                     </View>
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.cardFooter}>
-                      <View style={{ flex: 1 }} />
-
-                      <TouchableOpacity style={styles.detailButton}>
-                        <Text style={styles.detailButtonText}>
-                          Xem chi tiết
-                        </Text>
-                        <MaterialIcons
-                          name="arrow-forward"
-                          size={16}
-                          color="#136dec"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })
-            : utilityBills.map((bill) => (
+                  );
+                })
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <MaterialIcons
+                    name="receipt-long"
+                    size={48}
+                    color="#cbd5e1"
+                  />
+                  <Text style={styles.emptyText}>
+                    Không có hóa đơn tiền phòng
+                  </Text>
+                </View>
+              )
+            ) : utilityBills.length > 0 ? (
+              utilityBills.map((bill) => (
                 <TouchableOpacity
-                  key={bill.id}
+                  key={bill.month}
                   style={[
                     styles.utilityCard,
                     bill.status === "completed" && styles.utilityCardCompleted,
@@ -368,13 +389,13 @@ const ManagerBills = ({ navigation }: Props) => {
                           <View style={styles.statBox}>
                             <Text style={styles.statLabel}>ĐÃ THU</Text>
                             <Text style={styles.statValueSuccess}>
-                              {bill.collected}
+                              {bill.collected || "0 đ"}
                             </Text>
                           </View>
                           <View style={styles.statBox}>
                             <Text style={styles.statLabel}>CHỜ THU</Text>
                             <Text style={styles.statValueWarning}>
-                              {bill.pending}
+                              {bill.pending || "0 đ"}
                             </Text>
                           </View>
                         </View>
@@ -402,8 +423,19 @@ const ManagerBills = ({ navigation }: Props) => {
                     )}
                   </View>
                 </TouchableOpacity>
-              ))}
-        </View>
+              ))
+            ) : (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons
+                  name="calendar-today"
+                  size={48}
+                  color="#cbd5e1"
+                />
+                <Text style={styles.emptyText}>Không có hóa đơn điện nước</Text>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -731,6 +763,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
     color: "#0f172a",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 16,
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#dc2626",
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: "#136dec",
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  emptyText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#94a3b8",
+    fontWeight: "500",
   },
 });
 

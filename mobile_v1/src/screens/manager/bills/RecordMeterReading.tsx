@@ -1,20 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ScrollView,
   StatusBar,
-  SafeAreaView,
   Modal,
   TouchableWithoutFeedback,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { RouteProp } from "@react-navigation/native";
+import { RouteProp, useFocusEffect } from "@react-navigation/native";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../../../types";
+import { fetchBuildings } from "../../../services/buildingApi";
+import { monthlyUsageApi } from "../../../services/monthlyUsageApi";
 
 type RecordMeterReadingScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -31,81 +33,122 @@ interface Props {
   route: RecordMeterReadingScreenRouteProp;
 }
 
+interface RoomUsage {
+  room_id: number;
+  room_number: string;
+  floor: number;
+  building_name: string;
+  usage_id: number | null;
+  current_electricity: number | null;
+  current_water: number | null;
+  last_updated: string | null;
+  old_electricity: number | null;
+  old_water: number | null;
+  total_amount: string | null;
+  invoice_status: string | null;
+}
+
+interface Building {
+  id: number;
+  name: string;
+}
+
 const RecordMeterReading = ({ navigation, route }: Props) => {
-  const { period } = route.params || { period: "T10/2023" };
-  const [selectedBuilding, setSelectedBuilding] = useState("Tất cả");
+  const { period } = route.params || { period: "Tháng 12/2025" };
+  const [monthStr, yearStr] = period.replace("Tháng ", "").split("/");
+  const month = parseInt(monthStr);
+  const year = parseInt(yearStr);
+
+  const [selectedBuilding, setSelectedBuilding] = useState<Building | null>(
+    null
+  );
   const [selectedRoom, setSelectedRoom] = useState("Tất cả");
   const [modalVisible, setModalVisible] = useState(false);
-  const [activeFilterType, setActiveFilterType] = useState<"building" | "room">(
-    "building"
-  );
+  const [activeFilterType, setActiveFilterType] = useState<
+    "building" | "room" | "payment"
+  >("building");
   const [activeTab, setActiveTab] = useState<"completed" | "pending">(
     "completed"
   );
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "paid" | "unpaid">(
+    "all"
+  );
 
-  // Mock data
-  const stats = {
-    recorded: 45,
-    total_recorded: 57, // 45 + 12
-    pending: 12,
+  const [buildings, setBuildings] = useState<Building[]>([]);
+  const [rooms, setRooms] = useState<RoomUsage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [buildingsData, usagesData] = await Promise.all([
+        fetchBuildings(),
+        monthlyUsageApi.getUsageStatus(
+          month,
+          year,
+          selectedBuilding ? selectedBuilding.id.toString() : undefined
+        ),
+      ]);
+
+      console.log("check usagesData:", usagesData);
+
+      setBuildings(buildingsData);
+      setRooms(usagesData);
+    } catch (error) {
+      console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [month, year, selectedBuilding]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData();
   };
 
-  const rooms = [
-    {
-      id: "1",
-      name: "Phòng 101",
-      building: "Tòa A",
-      floor: "Tầng 1",
-      status: "pending",
-      lastUpdated: "10/09/2023",
-    },
-    {
-      id: "2",
-      name: "Phòng 102",
-      building: "Tòa A",
-      floor: "Tầng 1",
-      status: "pending",
-      lastUpdated: "10/09/2023",
-    },
-    {
-      id: "3",
-      name: "Phòng 103",
-      building: "Tòa A",
-      floor: "Tầng 1",
-      status: "completed",
-      electricity: 2450,
-      water: 120,
-    },
-    {
-      id: "4",
-      name: "Phòng 104",
-      building: "Tòa A",
-      floor: "Tầng 1",
-      status: "completed",
-      electricity: 2512,
-      water: 128,
-    },
+  const stats = {
+    recorded: rooms.filter((r) => r.usage_id).length,
+    total_recorded: rooms.length,
+    pending: rooms.filter((r) => !r.usage_id).length,
+  };
+
+  const buildingOptions = [
+    { id: -1, name: "Tất cả" },
+    ...buildings.map((b) => ({ id: b.id, name: b.name })),
   ];
 
-  const buildingOptions = ["Tất cả", "Tòa A", "Tòa B", "Tòa C", "Tòa D"];
+  // Get unique room numbers for filter
   const roomOptions = [
     "Tất cả",
-    "Phòng 101",
-    "Phòng 102",
-    "Phòng 103",
-    "Phòng 104",
+    ...Array.from(new Set(rooms.map((r) => r.room_number))).sort(),
   ];
 
-  const handleOpenFilter = (type: "building" | "room") => {
+  const paymentOptions = [
+    { id: "all", name: "Tất cả" },
+    { id: "paid", name: "Đã đóng" },
+    { id: "unpaid", name: "Chưa đóng" },
+  ];
+
+  const handleOpenFilter = (type: "building" | "room" | "payment") => {
     setActiveFilterType(type);
     setModalVisible(true);
   };
 
-  const handleSelectOption = (option: string) => {
+  const handleSelectOption = (option: any) => {
     if (activeFilterType === "building") {
-      setSelectedBuilding(option);
-    } else {
+      setSelectedBuilding(option.id === -1 ? null : option);
+    } else if (activeFilterType === "room") {
       setSelectedRoom(option);
+    } else {
+      setPaymentFilter(option.id);
     }
     setModalVisible(false);
   };
@@ -165,22 +208,22 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
       <TouchableOpacity
         style={[
           styles.filterChip,
-          selectedBuilding !== "Tất cả" && styles.activeFilterChip,
+          selectedBuilding !== null && styles.activeFilterChip,
         ]}
         onPress={() => handleOpenFilter("building")}
       >
         <Text
           style={[
             styles.filterText,
-            selectedBuilding !== "Tất cả" && styles.activeFilterText,
+            selectedBuilding !== null && styles.activeFilterText,
           ]}
         >
-          {selectedBuilding === "Tất cả" ? "Tòa nhà" : selectedBuilding}
+          {selectedBuilding ? selectedBuilding.name : "Tòa nhà"}
         </Text>
         <MaterialIcons
           name="expand-more"
           size={20}
-          color={selectedBuilding !== "Tất cả" ? "#136dec" : "#64748b"}
+          color={selectedBuilding !== null ? "#136dec" : "#64748b"}
         />
       </TouchableOpacity>
 
@@ -205,11 +248,41 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
           color={selectedRoom !== "Tất cả" ? "#136dec" : "#64748b"}
         />
       </TouchableOpacity>
+
+      {activeTab === "completed" && (
+        <TouchableOpacity
+          style={[
+            styles.filterChip,
+            paymentFilter !== "all" && styles.activeFilterChip,
+          ]}
+          onPress={() => handleOpenFilter("payment")}
+        >
+          <Text
+            style={[
+              styles.filterText,
+              paymentFilter !== "all" && styles.activeFilterText,
+            ]}
+          >
+            {paymentFilter === "all"
+              ? "Trạng thái"
+              : paymentFilter === "paid"
+              ? "Đã đóng"
+              : "Chưa đóng"}
+          </Text>
+          <MaterialIcons
+            name="expand-more"
+            size={20}
+            color={paymentFilter !== "all" ? "#136dec" : "#64748b"}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
   const getActiveOptions = () => {
-    return activeFilterType === "building" ? buildingOptions : roomOptions;
+    if (activeFilterType === "building") return buildingOptions;
+    if (activeFilterType === "payment") return paymentOptions;
+    return roomOptions;
   };
 
   const renderModal = () => (
@@ -226,33 +299,49 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
               <Text style={styles.modalTitle}>
                 {activeFilterType === "building"
                   ? "Chọn tòa nhà"
+                  : activeFilterType === "payment"
+                  ? "Chọn trạng thái"
                   : "Chọn phòng"}
               </Text>
-              {getActiveOptions().map((option, index) => {
-                const isSelected =
-                  activeFilterType === "building"
-                    ? selectedBuilding === option
-                    : selectedRoom === option;
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.modalOption}
-                    onPress={() => handleSelectOption(option)}
-                  >
-                    <Text
-                      style={[
-                        styles.modalOptionText,
-                        isSelected && styles.selectedModalOptionText,
-                      ]}
+              <ScrollView>
+                {getActiveOptions().map((option: any, index) => {
+                  let isSelected = false;
+                  let label = "";
+
+                  if (activeFilterType === "building") {
+                    isSelected =
+                      selectedBuilding?.id === option.id ||
+                      (selectedBuilding === null && option.id === -1);
+                    label = option.name;
+                  } else if (activeFilterType === "payment") {
+                    isSelected = paymentFilter === option.id;
+                    label = option.name;
+                  } else {
+                    isSelected = selectedRoom === option;
+                    label = option;
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.modalOption}
+                      onPress={() => handleSelectOption(option)}
                     >
-                      {option}
-                    </Text>
-                    {isSelected && (
-                      <MaterialIcons name="check" size={20} color="#136dec" />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+                      <Text
+                        style={[
+                          styles.modalOptionText,
+                          isSelected && styles.selectedModalOptionText,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                      {isSelected && (
+                        <MaterialIcons name="check" size={20} color="#136dec" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
           </TouchableWithoutFeedback>
         </View>
@@ -260,19 +349,31 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
     </Modal>
   );
 
-  const renderRoomItem = (item: any) => {
-    if (item.status === "pending") {
+  const renderRoomItem = (item: RoomUsage) => {
+    const isPending = !item.usage_id;
+
+    if (activeTab === "pending" && !isPending) return null;
+    if (activeTab === "completed" && isPending) return null;
+
+    if (activeTab === "completed") {
+      if (paymentFilter === "paid" && item.invoice_status !== "PAID")
+        return null;
+      if (paymentFilter === "unpaid" && item.invoice_status === "PAID")
+        return null;
+    }
+
+    if (isPending) {
       return (
-        <View key={item.id} style={styles.roomCard}>
+        <View key={item.room_id} style={styles.roomCard}>
           <View style={styles.roomHeader}>
             <View style={styles.roomInfo}>
               <View style={styles.roomIcon}>
                 <MaterialIcons name="meeting-room" size={24} color="#475569" />
               </View>
               <View>
-                <Text style={styles.roomName}>{item.name}</Text>
+                <Text style={styles.roomName}>Phòng {item.room_number}</Text>
                 <Text style={styles.roomDetail}>
-                  {item.building} - {item.floor}
+                  {item.building_name} - Tầng {item.floor}
                 </Text>
               </View>
             </View>
@@ -285,9 +386,23 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
           <View style={styles.divider} />
           <View style={styles.cardFooter}>
             <Text style={styles.lastUpdated}>
-              Cập nhật lần cuối: {item.lastUpdated}
+              Chỉ số cũ: Đ {item.old_electricity || 0} - N {item.old_water || 0}
             </Text>
-            <TouchableOpacity style={styles.actionButton}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() =>
+                navigation.navigate("EnterMeterIndex", {
+                  room: {
+                    id: item.room_id.toString(),
+                    name: `Phòng ${item.room_number}`,
+                    building: item.building_name,
+                    oldElectricity: item.old_electricity || 0,
+                    oldWater: item.old_water || 0,
+                  },
+                  period: period,
+                })
+              }
+            >
               <Text style={styles.actionButtonText}>Nhập chỉ số</Text>
               <MaterialIcons name="arrow-forward" size={16} color="#136dec" />
             </TouchableOpacity>
@@ -296,23 +411,30 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
       );
     }
 
+    const statusConfig =
+      item.invoice_status === "PAID"
+        ? { text: "Đã đóng", color: "#16a34a", bg: "#dcfce7" }
+        : { text: "Chưa đóng", color: "#dc2626", bg: "#fee2e2" };
+
     return (
-      <View key={item.id} style={[styles.roomCard, styles.completedCard]}>
+      <View key={item.room_id} style={[styles.roomCard, styles.completedCard]}>
         <View style={styles.roomHeader}>
           <View style={styles.roomInfo}>
             <View style={[styles.roomIcon, { backgroundColor: "#e0f2fe" }]}>
               <MaterialIcons name="check" size={24} color="#136dec" />
             </View>
             <View>
-              <Text style={styles.roomName}>{item.name}</Text>
+              <Text style={styles.roomName}>Phòng {item.room_number}</Text>
               <Text style={styles.roomDetail}>
-                {item.building} - {item.floor}
+                {item.building_name} - Tầng {item.floor}
               </Text>
             </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: "#f0fdf4" }]}>
-            <Text style={[styles.statusText, { color: "#16a34a" }]}>
-              Đã ghi
+          <View
+            style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}
+          >
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+              {statusConfig.text}
             </Text>
           </View>
         </View>
@@ -323,7 +445,7 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
             <View>
               <Text style={styles.readingLabel}>ĐIỆN</Text>
               <Text style={styles.readingValue}>
-                {item.electricity} <Text style={styles.unit}>kWh</Text>
+                {item.current_electricity} <Text style={styles.unit}>kWh</Text>
               </Text>
             </View>
           </View>
@@ -332,51 +454,73 @@ const RecordMeterReading = ({ navigation, route }: Props) => {
             <View>
               <Text style={styles.readingLabel}>NƯỚC</Text>
               <Text style={styles.readingValue}>
-                {item.water} <Text style={styles.unit}>m³</Text>
+                {item.current_water} <Text style={styles.unit}>m³</Text>
               </Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.divider} />
+        <View style={styles.cardFooter}>
+          <Text style={styles.totalLabel}>Tổng tiền:</Text>
+          <Text style={styles.totalAmount}>
+            {item.total_amount
+              ? parseInt(item.total_amount).toLocaleString("vi-VN")
+              : 0}{" "}
+            đ
+          </Text>
         </View>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       {renderHeader()}
       {renderTabs()}
-      <ScrollView contentContainerStyle={styles.content}>
-        {renderFilter()}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Danh sách phòng</Text>
-          <Text style={styles.sectionSubtitle}>
-            {selectedBuilding === "Tất cả" ? "Tất cả tòa" : selectedBuilding} •
-            Tầng 1
-          </Text>
+      {loading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#136dec" />
         </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          {renderFilter()}
 
-        <View style={styles.listContainer}>
-          {rooms
-            .filter((item) => item.status === activeTab)
-            .filter((item) =>
-              selectedBuilding === "Tất cả"
-                ? true
-                : item.building === selectedBuilding
-            )
-            .filter((item) =>
-              selectedRoom === "Tất cả" ? true : item.name === selectedRoom
-            )
-            .map((item) => renderRoomItem(item))}
-        </View>
-      </ScrollView>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Danh sách phòng</Text>
+            <Text style={styles.sectionSubtitle}>
+              {selectedBuilding ? selectedBuilding.name : "Tất cả tòa"}
+            </Text>
+          </View>
+
+          <View style={styles.listContainer}>
+            {rooms
+              .filter((item) =>
+                selectedRoom === "Tất cả"
+                  ? true
+                  : item.room_number === selectedRoom
+              )
+              .map((item) => renderRoomItem(item))}
+          </View>
+        </ScrollView>
+      )}
       {renderModal()}
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  centerContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
@@ -635,6 +779,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#64748b",
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  totalAmount: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#0f172a",
   },
 });
 

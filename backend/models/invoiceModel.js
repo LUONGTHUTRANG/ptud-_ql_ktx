@@ -32,6 +32,20 @@ const Invoice = {
     return rows;
   },
 
+  getForStudentApp: async (studentId, roomId) => {
+    const query = `
+      SELECT i.*, r.room_number, s.full_name as student_name, s.mssv 
+      FROM invoices i
+      LEFT JOIN rooms r ON i.room_id = r.id
+      LEFT JOIN students s ON i.student_id = s.id
+      WHERE (i.room_id = ? AND i.type = 'UTILITY_FEE')
+         OR (i.student_id = ? AND (i.type = 'ROOM_FEE' OR i.type = 'OTHER'))
+      ORDER BY i.time_invoiced DESC
+    `;
+    const [rows] = await db.query(query, [roomId, studentId]);
+    return rows;
+  },
+
   getById: async (id) => {
     const [rows] = await db.query(
       `SELECT 
@@ -148,6 +162,35 @@ const Invoice = {
   delete: async (id) => {
     await db.query("DELETE FROM invoices WHERE id = ?", [id]);
     return { id };
+  },
+
+  getByBuildingId: async (buildingId, type = null, status = null) => {
+    let query = `
+      SELECT i.*, r.room_number, b.name as building_name, s.full_name as student_name, s.mssv,
+             mu.month as usage_month, mu.year as usage_year
+      FROM invoices i
+      LEFT JOIN rooms r ON i.room_id = r.id
+      LEFT JOIN buildings b ON r.building_id = b.id
+      LEFT JOIN students s ON i.student_id = s.id
+      LEFT JOIN monthly_usages mu ON i.usage_id = mu.id
+      WHERE r.building_id = ?
+    `;
+    const params = [buildingId];
+
+    if (type) {
+      query += ` AND i.type = ?`;
+      params.push(type);
+    }
+
+    if (status) {
+      query += ` AND i.status = ?`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY i.time_invoiced DESC`;
+
+    const [rows] = await db.query(query, params);
+    return rows;
   },
 };
 
