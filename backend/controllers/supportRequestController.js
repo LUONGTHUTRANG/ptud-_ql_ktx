@@ -10,10 +10,15 @@ const getFileUrl = (req, filename) => {
 
 export const createSupportRequest = async (req, res) => {
   try {
-    const { student_id, type, title, content } = req.body;
+    let { student_id, type, title, content } = req.body;
     let attachment_path = null;
 
-    console.log("request", type, title);
+    // If user is a student, use their ID from the token
+    if (req.user && req.user.role === "student") {
+      student_id = req.user.id;
+    }
+
+    console.log("request", type, title, "student_id:", student_id);
 
     if (req.file) {
       // Store the relative path that can be served statically
@@ -89,7 +94,7 @@ export const getSupportRequestById = async (req, res) => {
       // Nếu logic của bạn là 1 ảnh:
       const fullUrl = getFileUrl(req, request.attachment_path);
       request.attachment_url = fullUrl; // Giữ lại field cũ nếu cần tương thích ngược
-      request.images.push(fullUrl);     // Thêm vào mảng images
+      request.images.push(fullUrl); // Thêm vào mảng images
     }
 
     console.log("Fetched support request:", request);

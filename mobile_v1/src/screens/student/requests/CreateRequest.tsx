@@ -82,7 +82,7 @@ const CreateRequest = ({ navigation }: Props) => {
       }
 
       // TODO: Get actual student ID from auth context/storage
-      formData.append("student_id", "1");
+      // formData.append("student_id", "1"); // Backend now handles this from token
       formData.append("type", backendType);
       formData.append("title", title);
       formData.append("content", description);
